@@ -1,7 +1,19 @@
-import { Ledger, line, type JournalLine } from "./ledger";
+import {
+  applyJournalLines,
+  line,
+  type AccountPostings,
+  type JournalLine,
+} from "./postings";
 
 export type FiatTarget = "households" | "firms";
 
+/**
+ * Domain-level actions.
+ *
+ * Important modeling rule: each action compiles to a deterministic journal (double-entry lines).
+ * The simulation persists both the action and its emitted lines so history remains auditable even if
+ * implementation details evolve later.
+ */
 export type SimAction =
   | { type: "bankLoanHouseholds"; amount: number }
   | { type: "bankLoanFirms"; amount: number }
@@ -19,7 +31,7 @@ function assertPositive(name: string, amount: number) {
   if (!(amount > 0) || Number.isNaN(amount)) throw new Error(`${name} must be positive`);
 }
 
-/** Build journal lines without applying — for testing composition. */
+/** Compile a domain action into accounting postings (without mutating any state). */
 export function linesForAction(action: SimAction): JournalLine[] {
   switch (action.type) {
     case "bankLoanHouseholds": {
@@ -140,8 +152,8 @@ export function linesForAction(action: SimAction): JournalLine[] {
   }
 }
 
-export function applyAction(ledger: Ledger, action: SimAction): void {
-  ledger.applyLines(linesForAction(action));
+export function applyAction(postings: AccountPostings, action: SimAction): void {
+  applyJournalLines(postings, linesForAction(action));
 }
 
 /** Short human-readable label for logs and UI. */

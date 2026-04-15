@@ -1,5 +1,5 @@
 export * from "./accounts";
-export * from "./ledger";
+export * from "./postings";
 export * from "./events";
 export * from "./snapshot";
 export * from "./simulation";

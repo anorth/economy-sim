@@ -1,7 +1,16 @@
 import type { AccountId, AccountKind } from "./accounts";
 import { ACCOUNT_META } from "./accounts";
-import type { Ledger } from "./ledger";
+import {
+  balance,
+  type AccountPostings,
+} from "./postings";
 
+/**
+ * Read-model helpers built from postings.
+ *
+ * Nothing in this file is part of the persisted simulation state. These shapes exist to support UI,
+ * charting, and diagnostics from a single period's `AccountPostings`.
+ */
 export type SectorName =
   | "Households"
   | "Firms"
@@ -45,7 +54,7 @@ export type SectorSnapshot = {
 };
 
 /** Net financial position = financial assets minus financial liabilities (equity is the residual and should match). */
-export function sectorSnapshots(ledger: Ledger): SectorSnapshot[] {
+export function sectorSnapshots(postings: AccountPostings): SectorSnapshot[] {
   return (Object.keys(SECTOR_ACCOUNTS) as SectorName[]).map((sector) => {
     const ids = SECTOR_ACCOUNTS[sector];
     const accounts: SectorAccountRow[] = [];
@@ -53,7 +62,7 @@ export function sectorSnapshots(ledger: Ledger): SectorSnapshot[] {
     let liabilities = 0;
     let equity = 0;
     for (const id of ids) {
-      const b = ledger.balance(id);
+      const b = balance(postings, id);
       const kind = ACCOUNT_META[id].kind;
       accounts.push({
         id,
@@ -70,57 +79,88 @@ export function sectorSnapshots(ledger: Ledger): SectorSnapshot[] {
   });
 }
 
-export type EconomySnapshot = {
-  period: number;
-  /** Government spending minus tax in this period if tracked externally — here we expose stocks only */
-  accounts: ReturnType<Ledger["toJSON"]>;
-  sectors: SectorSnapshot[];
-  aggregates: {
-    /** Bank deposits to HH + Firms — broad money; no physical cash in this model. */
-    moneySupply: number;
-    /** Bank loans to households and firms (private-sector debt to banks). */
-    privateDebt: number;
-    /** Treasury bonds outstanding (government debt). */
-    publicDebt: number;
-    totalReserves: number;
-    bankBonds: number;
-    hhBonds: number;
-    firmBonds: number;
-    cbBonds: number;
-    bankLoans: number;
-    hhLoans: number;
-    firmLoans: number;
-    generalAccount: number;
-    treasuryEquity: number;
-    hhEquity: number;
-    firmEquity: number;
-    bankEquity: number;
-  };
+export type AccountDisplayRow = {
+  debit: number;
+  credit: number;
+  balance: number;
+  kind: AccountKind;
 };
 
-export function buildSnapshot(ledger: Ledger, period: number): EconomySnapshot {
-  const j = ledger.toJSON();
+export type AccountDisplay = Record<AccountId, AccountDisplayRow>;
+
+export function accountDisplayFromPostings(postings: AccountPostings): AccountDisplay {
+  const out = {} as AccountDisplay;
+  for (const id of Object.keys(ACCOUNT_META) as AccountId[]) {
+    const { debit, credit } = postings[id]!;
+    out[id] = {
+      debit,
+      credit,
+      balance: balance(postings, id),
+      kind: ACCOUNT_META[id].kind,
+    };
+  }
+  return out;
+}
+
+export type EconomyAggregates = {
+  /** Bank deposits to HH + Firms — broad money; no physical cash in this model. */
+  moneySupply: number;
+  /** Bank loans to households and firms (private-sector debt to banks). */
+  privateDebt: number;
+  /** Treasury bonds outstanding (government debt). */
+  publicDebt: number;
+  totalReserves: number;
+  bankBonds: number;
+  hhBonds: number;
+  firmBonds: number;
+  cbBonds: number;
+  bankLoans: number;
+  hhLoans: number;
+  firmLoans: number;
+  generalAccount: number;
+  treasuryEquity: number;
+  hhEquity: number;
+  firmEquity: number;
+  bankEquity: number;
+};
+
+export function economyAggregates(postings: AccountPostings): EconomyAggregates {
+  return {
+    moneySupply: balance(postings, "hh.deposits") + balance(postings, "firms.deposits"),
+    privateDebt: balance(postings, "hh.loans") + balance(postings, "firms.loans"),
+    publicDebt: balance(postings, "treasury.bonds"),
+    totalReserves: balance(postings, "banks.reserves"),
+    bankBonds: balance(postings, "banks.bonds"),
+    hhBonds: balance(postings, "hh.bonds"),
+    firmBonds: balance(postings, "firms.bonds"),
+    cbBonds: balance(postings, "cb.bonds"),
+    bankLoans: balance(postings, "banks.loans"),
+    hhLoans: balance(postings, "hh.loans"),
+    firmLoans: balance(postings, "firms.loans"),
+    generalAccount: balance(postings, "treasury.general_account"),
+    treasuryEquity: balance(postings, "treasury.equity"),
+    hhEquity: balance(postings, "hh.equity"),
+    firmEquity: balance(postings, "firms.equity"),
+    bankEquity: balance(postings, "banks.equity"),
+  };
+}
+
+/**
+ * Derived UI/reporting snapshot: not persisted; built from {@link AccountPostings} on demand.
+ * `period` is the simulation period index (0 = initial, N = after N completed advances).
+ */
+export type EconomyView = {
+  period: number;
+  accounts: AccountDisplay;
+  sectors: SectorSnapshot[];
+  aggregates: EconomyAggregates;
+};
+
+export function buildEconomyView(postings: AccountPostings, period: number): EconomyView {
   return {
     period,
-    accounts: j,
-    sectors: sectorSnapshots(ledger),
-    aggregates: {
-      moneySupply: ledger.balance("hh.deposits") + ledger.balance("firms.deposits"),
-      privateDebt: ledger.balance("hh.loans") + ledger.balance("firms.loans"),
-      publicDebt: ledger.balance("treasury.bonds"),
-      totalReserves: ledger.balance("banks.reserves"),
-      bankBonds: ledger.balance("banks.bonds"),
-      hhBonds: ledger.balance("hh.bonds"),
-      firmBonds: ledger.balance("firms.bonds"),
-      cbBonds: ledger.balance("cb.bonds"),
-      bankLoans: ledger.balance("banks.loans"),
-      hhLoans: ledger.balance("hh.loans"),
-      firmLoans: ledger.balance("firms.loans"),
-      generalAccount: ledger.balance("treasury.general_account"),
-      treasuryEquity: ledger.balance("treasury.equity"),
-      hhEquity: ledger.balance("hh.equity"),
-      firmEquity: ledger.balance("firms.equity"),
-      bankEquity: ledger.balance("banks.equity"),
-    },
+    accounts: accountDisplayFromPostings(postings),
+    sectors: sectorSnapshots(postings),
+    aggregates: economyAggregates(postings),
   };
 }

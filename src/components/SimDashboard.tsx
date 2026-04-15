@@ -17,7 +17,12 @@ import {
   describeAction,
   linesForAction,
   applyAndAdvance,
+  buildEconomyView,
   createSimulation,
+  currentPostings,
+  economyAggregates,
+  flattenActionLog,
+  undoLastPeriod,
   type AccountKind,
   type JournalLine,
   type SimAction,
@@ -148,22 +153,27 @@ export function SimDashboard() {
   const [taxFrom, setTaxFrom] = useState<"households" | "firms">("households");
   const [queue, setQueue] = useState<SimAction[]>([]);
 
-  const latest = sim.history[sim.history.length - 1]!;
+  const latest = useMemo(
+    () => buildEconomyView(currentPostings(sim), sim.periods.length),
+    [sim.history, sim.periods.length]
+  );
+
+  const actionLog = useMemo(
+    () => flattenActionLog(sim.periods.map((p) => p.actions)),
+    [sim.periods]
+  );
 
   const chartData = useMemo(() => {
-    return sim.history.map((h) => ({
-      period: h.period,
-      moneySupply: h.aggregates.moneySupply,
-      privateDebt: h.aggregates.privateDebt,
-      publicDebt: h.aggregates.publicDebt,
-      hhEquity: h.aggregates.hhEquity,
-      firmEquity: h.aggregates.firmEquity,
-      bankEquity: h.aggregates.bankEquity,
-      treasuryEquity: h.aggregates.treasuryEquity,
+    return sim.history.map((postings, periodIndex) => ({
+      period: periodIndex,
+      ...economyAggregates(postings),
     }));
   }, [sim.history]);
 
-  const sectorSum = useMemo(() => sumSectorNetFinancialAssets(sim.ledger), [sim.ledger]);
+  const sectorSum = useMemo(
+    () => sumSectorNetFinancialAssets(currentPostings(sim)),
+    [sim.history]
+  );
 
   const addToQueue = useCallback(() => {
     const a = Number(amount);
@@ -184,6 +194,10 @@ export function SimDashboard() {
   const reset = useCallback(() => {
     setSim(createSimulation());
     setQueue([]);
+  }, []);
+
+  const undoPeriod = useCallback(() => {
+    setSim((s) => undoLastPeriod(s));
   }, []);
 
   return (
@@ -324,6 +338,14 @@ export function SimDashboard() {
               </button>
               <button
                 type="button"
+                disabled={sim.periods.length === 0}
+                className="rounded-md border border-amber-300 px-4 py-2 text-sm text-amber-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-800 dark:text-amber-200"
+                onClick={undoPeriod}
+              >
+                Undo last period
+              </button>
+              <button
+                type="button"
                 className="rounded-md border border-red-300 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:text-red-400"
                 onClick={reset}
               >
@@ -421,11 +443,11 @@ export function SimDashboard() {
 
       <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">Action history</h2>
-        {sim.actionLog.length === 0 ? (
+        {actionLog.length === 0 ? (
           <p className="mt-4 text-sm text-zinc-500">No actions recorded yet.</p>
         ) : (
           <div className="mt-4 flex max-h-[min(70vh,36rem)] flex-col gap-4 overflow-y-auto pr-1">
-            {sim.actionLog.map((entry) => {
+            {actionLog.map((entry) => {
               const lines = linesForAction(entry.action);
               const pairs = pairJournalLines(lines);
               return (

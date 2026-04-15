@@ -1,17 +1,13 @@
-import type { Ledger } from "./ledger";
+import type { AccountPostings } from "./postings";
 import { sectorSnapshots } from "./snapshot";
 
-/**
- * In a closed pure-financial model, the sum of each sector’s net financial assets
- * (assets minus liabilities plus equity, sector by sector) is identically zero.
- */
-export function sumSectorNetFinancialAssets(ledger: Ledger): number {
-  return sectorSnapshots(ledger).reduce((s, x) => s + x.netFinancialAssets, 0);
+export function sumSectorNetFinancialAssets(postings: AccountPostings): number {
+  return sectorSnapshots(postings).reduce((s, x) => s + x.netFinancialAssets, 0);
 }
 
-export function assertClosedSystem(ledger: Ledger, epsilon = 1e-6): void {
-  const g = sumSectorNetFinancialAssets(ledger);
+export function assertClosedSystem(postings: AccountPostings, epsilon = 1e-6): void {
+  const g = sumSectorNetFinancialAssets(postings);
   if (Math.abs(g) > epsilon) {
-    throw new Error(`Sector NFAs do not sum to zero: ${g}`);
+    throw new Error(`Closed-system check failed: sum of sector NFAs = ${g}`);
   }
 }
