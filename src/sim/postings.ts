@@ -64,6 +64,24 @@ export function normalizePostings(raw: unknown): AccountPostings {
   return base;
 }
 
+/** Hydrate optional initial seed from storage; unknown keys are ignored. */
+export function normalizePostingsSeed(raw: unknown): AccountPostingsSeed | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== "object") return undefined;
+  const src = raw as Record<string, unknown>;
+  const out: AccountPostingsSeed = {};
+  for (const id of Object.keys(ACCOUNT_META) as AccountId[]) {
+    const row = src[id];
+    if (row && typeof row === "object" && row !== null) {
+      const r = row as Record<string, unknown>;
+      const debit = typeof r.debit === "number" && Number.isFinite(r.debit) ? r.debit : 0;
+      const credit = typeof r.credit === "number" && Number.isFinite(r.credit) ? r.credit : 0;
+      out[id] = { debit, credit };
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 export function balance(postings: AccountPostings, id: AccountId): number {
   const m = ACCOUNT_META[id];
   const { debit, credit } = postings[id]!;

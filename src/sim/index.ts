@@ -4,3 +4,4 @@ export * from "./events";
 export * from "./snapshot";
 export * from "./simulation";
 export * from "./invariants";
+export * from "./saveGame";

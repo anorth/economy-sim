@@ -19,11 +19,11 @@ export type AccountId =
   | "banks.deposits_due"
   | "banks.bonds"
   | "banks.equity"
-  | "treasury.general_account"
+  | "treasury.cb_account"
   | "treasury.bonds"
   | "treasury.equity"
   | "cb.reserves_liability"
-  | "cb.general_account_liability"
+  | "cb.treasury_account"
   | "cb.bonds";
 
 export const ACCOUNT_META: Record<
@@ -43,11 +43,11 @@ export const ACCOUNT_META: Record<
   "banks.deposits_due": { label: "Deposits owed", kind: "liability", sector: "Banks" },
   "banks.bonds": { label: "Govt bonds held", kind: "asset", sector: "Banks" },
   "banks.equity": { label: "Equity", kind: "equity", sector: "Banks" },
-  "treasury.general_account": { label: "General account / CRF", kind: "asset", sector: "Treasury" },
+  "treasury.cb_account": { label: "General account / CRF", kind: "asset", sector: "Treasury" },
   "treasury.bonds": { label: "Bonds outstanding", kind: "liability", sector: "Treasury" },
   "treasury.equity": { label: "Equity", kind: "equity", sector: "Treasury" },
   "cb.reserves_liability": { label: "Reserves", kind: "liability", sector: "Central Bank" },
-  "cb.general_account_liability": { label: "Treasury General Account", kind: "liability", sector: "Central Bank" },
+  "cb.treasury_account": { label: "Treasury General Account", kind: "liability", sector: "Central Bank" },
   "cb.bonds": { label: "Govt bonds held", kind: "asset", sector: "Central Bank" },
 };
 

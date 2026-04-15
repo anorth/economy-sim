@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import {
   CartesianGrid,
   Legend,
@@ -20,8 +20,11 @@ import {
   buildEconomyView,
   createSimulation,
   currentPostings,
+  DEFAULT_SAVE_SLOT_ID,
   economyAggregates,
   flattenActionLog,
+  loadSimulationFromBrowser,
+  persistSimulationToBrowser,
   undoLastPeriod,
   type AccountKind,
   type JournalLine,
@@ -79,6 +82,26 @@ function buildAction(
 
 function fmt(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+type QueuedAction = { id: number; action: SimAction };
+
+function QueueRemoveIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 16 16"
+      width={16}
+      height={16}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      aria-hidden
+    >
+      <path d="M4 4l8 8M12 4l-8 8" />
+    </svg>
+  );
 }
 
 /** Consecutive lines in `linesForAction` are emitted as debit/credit pairs. */
@@ -146,12 +169,18 @@ function AleHistoryCell({
 }
 
 export function SimDashboard() {
-  const [sim, setSim] = useState<SimulationState>(() => createSimulation());
+  const [sim, setSim] = useState<SimulationState>(
+    () => loadSimulationFromBrowser(DEFAULT_SAVE_SLOT_ID) ?? createSimulation()
+  );
   const [actionType, setActionType] = useState<SimAction["type"]>("fiatSpend");
   const [amount, setAmount] = useState("100");
   const [fiatTarget, setFiatTarget] = useState<"households" | "firms">("households");
   const [taxFrom, setTaxFrom] = useState<"households" | "firms">("households");
-  const [queue, setQueue] = useState<SimAction[]>([]);
+  const [queue, setQueue] = useState<QueuedAction[]>([]);
+  const queueIdRef = useRef(0);
+
+  const simRef = useRef(sim);
+  simRef.current = sim;
 
   const latest = useMemo(
     () => buildEconomyView(currentPostings(sim), sim.periods.length),
@@ -179,25 +208,54 @@ export function SimDashboard() {
     const a = Number(amount);
     if (!Number.isFinite(a) || a <= 0) return;
     const next = buildAction(actionType, a, fiatTarget, taxFrom);
-    setQueue((q) => [...q, next]);
+    const id = ++queueIdRef.current;
+    setQueue((q) => [...q, { id, action: next }]);
   }, [actionType, amount, fiatTarget, taxFrom]);
 
+  const removeFromQueue = useCallback((id: number) => {
+    setQueue((q) => q.filter((item) => item.id !== id));
+  }, []);
+
   const runPeriod = useCallback(() => {
-    setSim((s) => applyAndAdvance(s, queue).state);
+    setSim((s) => {
+      const next = applyAndAdvance(
+        s,
+        queue.map((item) => item.action)
+      ).state;
+      persistSimulationToBrowser(DEFAULT_SAVE_SLOT_ID, next);
+      return next;
+    });
     setQueue([]);
   }, [queue]);
 
   const advanceEmpty = useCallback(() => {
-    setSim((s) => applyAndAdvance(s, []).state);
+    setSim((s) => {
+      const next = applyAndAdvance(s, []).state;
+      persistSimulationToBrowser(DEFAULT_SAVE_SLOT_ID, next);
+      return next;
+    });
   }, []);
 
   const reset = useCallback(() => {
-    setSim(createSimulation());
+    const next = createSimulation();
+    setSim(next);
+    persistSimulationToBrowser(DEFAULT_SAVE_SLOT_ID, next);
     setQueue([]);
   }, []);
 
   const undoPeriod = useCallback(() => {
-    setSim((s) => undoLastPeriod(s));
+    const current = simRef.current;
+    if (current.periods.length === 0) return;
+    const restoredActions = [...current.periods[current.periods.length - 1]!.actions];
+    const next = undoLastPeriod(current);
+    setSim(next);
+    setQueue(
+      restoredActions.map((action) => ({
+        id: ++queueIdRef.current,
+        action,
+      }))
+    );
+    persistSimulationToBrowser(DEFAULT_SAVE_SLOT_ID, next);
   }, []);
 
   return (
@@ -239,17 +297,6 @@ export function SimDashboard() {
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-zinc-500">Amount</span>
-              <input
-                type="number"
-                min={0}
-                step="any"
-                className="rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono dark:border-zinc-700 dark:bg-zinc-950"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
             </label>
             {actionType === "fiatSpend" && (
               <div className="flex gap-4 text-sm">
@@ -295,6 +342,18 @@ export function SimDashboard() {
                 </label>
               </div>
             )}
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-zinc-500">Amount</span>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                className="rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono dark:border-zinc-700 dark:bg-zinc-950"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+              />
+            </label>
+
             <button
               type="button"
               className="rounded-md bg-zinc-900 px-4 py-2 text-sm text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
@@ -303,38 +362,32 @@ export function SimDashboard() {
               Add to queue
             </button>
             {queue.length > 0 && (
-              <div className="space-y-2">
-                <ul className="rounded-md border border-dashed border-zinc-300 p-3 text-sm dark:border-zinc-700">
-                  {queue.map((a, i) => (
-                    <li key={i} className="font-mono text-xs">
-                      {JSON.stringify(a)}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  className="text-xs text-zinc-500 underline hover:text-zinc-800 dark:hover:text-zinc-300"
-                  onClick={() => setQueue([])}
-                >
-                  Clear queue
-                </button>
-              </div>
+              <ul className="space-y-1 rounded-md border border-dashed border-zinc-300 p-3 text-sm dark:border-zinc-700">
+                {queue.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex items-start justify-between gap-2 font-mono text-xs"
+                  >
+                    <span className="min-w-0 break-all">{JSON.stringify(item.action)}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeFromQueue(item.id)}
+                      className="shrink-0 rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                      aria-label="Remove from queue"
+                    >
+                      <QueueRemoveIcon />
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                disabled={queue.length === 0}
                 className="rounded-md bg-emerald-700 px-4 py-2 text-sm text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-40"
                 onClick={runPeriod}
               >
-                Run period (apply queue & advance)
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-600"
-                onClick={advanceEmpty}
-              >
-                Advance period (no actions)
+                Run period ({queue.length} actions)
               </button>
               <button
                 type="button"
@@ -346,7 +399,7 @@ export function SimDashboard() {
               </button>
               <button
                 type="button"
-                className="rounded-md border border-red-300 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:text-red-400"
+                className="rounded-md border border-red-300 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/50"
                 onClick={reset}
               >
                 Reset simulation

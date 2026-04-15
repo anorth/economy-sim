@@ -76,8 +76,8 @@ export function linesForAction(action: SimAction): JournalLine[] {
       const eq = action.to === "households" ? "hh.equity" : "firms.equity";
       return [
         line("treasury.equity", action.amount, 0),
-        line("treasury.general_account", 0, action.amount),
-        line("cb.general_account_liability", action.amount, 0),
+        line("treasury.cb_account", 0, action.amount),
+        line("cb.treasury_account", action.amount, 0),
         line("cb.reserves_liability", 0, action.amount),
         line("banks.reserves", action.amount, 0),
         line("banks.deposits_due", 0, action.amount),
@@ -95,18 +95,18 @@ export function linesForAction(action: SimAction): JournalLine[] {
         line("banks.deposits_due", action.amount, 0),
         line("banks.reserves", 0, action.amount),
         line("cb.reserves_liability", action.amount, 0),
-        line("cb.general_account_liability", 0, action.amount),
-        line("treasury.general_account", action.amount, 0),
+        line("cb.treasury_account", 0, action.amount),
+        line("treasury.cb_account", action.amount, 0),
         line("treasury.equity", 0, action.amount),
       ];
     }
     case "treasurySellBondsToBanks": {
       assertPositive("amount", action.amount);
       return [
-        line("treasury.general_account", action.amount, 0),
+        line("treasury.cb_account", action.amount, 0),
         line("treasury.bonds", 0, action.amount),
         line("cb.reserves_liability", action.amount, 0),
-        line("cb.general_account_liability", 0, action.amount),
+        line("cb.treasury_account", 0, action.amount),
         line("banks.bonds", action.amount, 0),
         line("banks.reserves", 0, action.amount),
       ];
@@ -124,8 +124,8 @@ export function linesForAction(action: SimAction): JournalLine[] {
       assertPositive("amount", action.amount);
       return [
         line("treasury.equity", action.amount, 0),
-        line("treasury.general_account", 0, action.amount),
-        line("cb.general_account_liability", action.amount, 0),
+        line("treasury.cb_account", 0, action.amount),
+        line("cb.treasury_account", action.amount, 0),
         line("cb.reserves_liability", 0, action.amount),
         line("banks.reserves", action.amount, 0),
         line("banks.equity", 0, action.amount),

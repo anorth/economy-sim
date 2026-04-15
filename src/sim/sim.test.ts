@@ -15,6 +15,7 @@ import {
 import { assertClosedSystem } from "./invariants";
 import { applyJournalLines, balance, clonePostings, emptyPostings } from "./postings";
 import { linesForAction } from "./events";
+import { hydrateSimulationState } from "./saveGame";
 
 describe("balanceDeltaFromLine", () => {
   it("uses normal-balance signs for each kind", () => {
@@ -86,6 +87,19 @@ describe("undo last period (snapshot stack, no replay)", () => {
     const s = createSimulation();
     const t = undoLastPeriod(s);
     expect(t.periods).toHaveLength(0);
+  });
+});
+
+describe("save game hydrate", () => {
+  it("round-trips through JSON like localStorage would", () => {
+    let s = createSimulation();
+    s = applyAndAdvance(s, [{ type: "fiatSpend", amount: 25, to: "households" }]).state;
+    const json = JSON.stringify(s);
+    const back = hydrateSimulationState(JSON.parse(json) as unknown);
+    expect(back.periods).toHaveLength(1);
+    expect(balance(currentPostings(back), "hh.deposits")).toBe(
+      balance(currentPostings(s), "hh.deposits")
+    );
   });
 });
 
@@ -242,7 +256,7 @@ describe("economic semantics", () => {
     const p = currentPostings(s);
     expect(balance(p, "banks.bonds")).toBe(100);
     expect(balance(p, "banks.reserves")).toBe(reservesBefore - 100);
-    expect(balance(p, "treasury.general_account")).toBe(-400);
+    expect(balance(p, "treasury.cb_account")).toBe(-400);
     assertClosedSystem(p);
   });
 

@@ -28,8 +28,8 @@ const SECTOR_ACCOUNTS: Record<SectorName, AccountId[]> = {
     "banks.bonds",
     "banks.equity",
   ],
-  Treasury: ["treasury.general_account", "treasury.bonds", "treasury.equity"],
-  "Central Bank": ["cb.reserves_liability", "cb.general_account_liability", "cb.bonds"],
+  Treasury: ["treasury.cb_account", "treasury.bonds", "treasury.equity"],
+  "Central Bank": ["cb.reserves_liability", "cb.treasury_account", "cb.bonds"],
 };
 
 export type SectorAccountRow = {
@@ -137,7 +137,7 @@ export function economyAggregates(postings: AccountPostings): EconomyAggregates 
     bankLoans: balance(postings, "banks.loans"),
     hhLoans: balance(postings, "hh.loans"),
     firmLoans: balance(postings, "firms.loans"),
-    generalAccount: balance(postings, "treasury.general_account"),
+    generalAccount: balance(postings, "treasury.cb_account"),
     treasuryEquity: balance(postings, "treasury.equity"),
     hhEquity: balance(postings, "hh.equity"),
     firmEquity: balance(postings, "firms.equity"),
