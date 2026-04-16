@@ -6,8 +6,8 @@ import dynamic from "next/dynamic";
  * Loads the dashboard only on the client so initial state can read `localStorage` without SSR
  * hydration mismatches.
  */
-export const SimDashboardRoot = dynamic(
-  () => import("./SimDashboard").then((m) => m.SimDashboard),
+export const ManualSimDashboardRoot = dynamic(
+  () => import("./ManualSimDashboard").then((m) => m.ManualSimDashboard),
   {
     ssr: false,
     loading: () => (

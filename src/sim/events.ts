@@ -21,6 +21,10 @@ export type SimAction =
   | { type: "repayLoanFirms"; amount: number }
   | { type: "fiatSpend"; amount: number; to: FiatTarget }
   | { type: "tax"; amount: number; from: FiatTarget }
+  /** Firms pay wages: deposits move firms → households, with matching equity (cost / labour income). */
+  | { type: "payWages"; amount: number }
+  /** Households buy goods from firms: deposits firms → households, equity opposite to wages. */
+  | { type: "householdConsumption"; amount: number }
   | { type: "treasurySellBondsToBanks"; amount: number }
   | { type: "cbBuyBondsFromBanks"; amount: number }
   | { type: "treasuryPayCouponToBanks"; amount: number }
@@ -100,6 +104,24 @@ export function linesForAction(action: SimAction): JournalLine[] {
         line("treasury.equity", 0, action.amount),
       ];
     }
+    case "payWages": {
+      assertPositive("amount", action.amount);
+      return [
+        line("hh.deposits", action.amount, 0),
+        line("firms.deposits", 0, action.amount),
+        line("firms.equity", action.amount, 0),
+        line("hh.equity", 0, action.amount),
+      ];
+    }
+    case "householdConsumption": {
+      assertPositive("amount", action.amount);
+      return [
+        line("firms.deposits", action.amount, 0),
+        line("hh.deposits", 0, action.amount),
+        line("hh.equity", action.amount, 0),
+        line("firms.equity", 0, action.amount),
+      ];
+    }
     case "treasurySellBondsToBanks": {
       assertPositive("amount", action.amount);
       return [
@@ -171,6 +193,10 @@ export function describeAction(action: SimAction): string {
       return `Fiat spend → ${action.to} (${action.amount})`;
     case "tax":
       return `Tax ← ${action.from} (${action.amount})`;
+    case "payWages":
+      return `Pay wages (firms → households) (${action.amount})`;
+    case "householdConsumption":
+      return `Household consumption (goods from firms) (${action.amount})`;
     case "treasurySellBondsToBanks":
       return `Treasury sells bonds to banks (${action.amount})`;
     case "cbBuyBondsFromBanks":

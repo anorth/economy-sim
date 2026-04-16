@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useCallback, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CartesianGrid,
   Legend,
@@ -17,19 +18,19 @@ import {
   describeAction,
   linesForAction,
   applyAndAdvance,
-  buildEconomyView,
-  createSimulation,
+  buildLedgerEconomyView,
+  createFinancialSimulation,
   currentPostings,
-  DEFAULT_SAVE_SLOT_ID,
-  economyAggregates,
   flattenActionLog,
-  loadSimulationFromBrowser,
+  ledgerEconomyAggregates,
+  loadManualFinancialSimulationFromBrowser,
+  MANUAL_FINANCIAL_SLOT_ID,
   persistSimulationToBrowser,
   undoLastPeriod,
   type AccountKind,
   type JournalLine,
   type SimAction,
-  type SimulationState,
+  type FinancialSimulationState,
   sumSectorNetFinancialAssets,
 } from "@/sim";
 
@@ -45,6 +46,8 @@ const ACTION_ORDER: SimAction["type"][] = [
   "treasuryPayCouponToBanks",
   "banksSellBondsToHouseholds",
   "banksSellBondsToFirms",
+  "payWages",
+  "householdConsumption",
 ];
 
 const LABELS: Record<SimAction["type"], string> = {
@@ -59,6 +62,8 @@ const LABELS: Record<SimAction["type"], string> = {
   treasuryPayCouponToBanks: "Treasury coupon payment → banks",
   banksSellBondsToHouseholds: "Banks sell bonds to households",
   banksSellBondsToFirms: "Banks sell bonds to firms",
+  payWages: "Pay wages (firms → households)",
+  householdConsumption: "Household consumption (goods from firms)",
 };
 
 function needsFiatTarget(t: SimAction["type"]): t is "fiatSpend" {
@@ -168,9 +173,9 @@ function AleHistoryCell({
   );
 }
 
-export function SimDashboard() {
-  const [sim, setSim] = useState<SimulationState>(
-    () => loadSimulationFromBrowser(DEFAULT_SAVE_SLOT_ID) ?? createSimulation()
+export function ManualSimDashboard() {
+  const [sim, setSim] = useState<FinancialSimulationState>(
+    () => loadManualFinancialSimulationFromBrowser() ?? createFinancialSimulation()
   );
   const [actionType, setActionType] = useState<SimAction["type"]>("fiatSpend");
   const [amount, setAmount] = useState("100");
@@ -180,11 +185,13 @@ export function SimDashboard() {
   const queueIdRef = useRef(0);
 
   const simRef = useRef(sim);
-  simRef.current = sim;
+  useEffect(() => {
+    simRef.current = sim;
+  }, [sim]);
 
   const latest = useMemo(
-    () => buildEconomyView(currentPostings(sim), sim.periods.length),
-    [sim.history, sim.periods.length]
+    () => buildLedgerEconomyView(currentPostings(sim), sim.periods.length),
+    [sim]
   );
 
   const actionLog = useMemo(
@@ -195,13 +202,13 @@ export function SimDashboard() {
   const chartData = useMemo(() => {
     return sim.history.map((postings, periodIndex) => ({
       period: periodIndex,
-      ...economyAggregates(postings),
+      ...ledgerEconomyAggregates(postings),
     }));
-  }, [sim.history]);
+  }, [sim]);
 
   const sectorSum = useMemo(
     () => sumSectorNetFinancialAssets(currentPostings(sim)),
-    [sim.history]
+    [sim]
   );
 
   const addToQueue = useCallback(() => {
@@ -222,24 +229,16 @@ export function SimDashboard() {
         s,
         queue.map((item) => item.action)
       ).state;
-      persistSimulationToBrowser(DEFAULT_SAVE_SLOT_ID, next);
+      persistSimulationToBrowser(MANUAL_FINANCIAL_SLOT_ID, next);
       return next;
     });
     setQueue([]);
   }, [queue]);
 
-  const advanceEmpty = useCallback(() => {
-    setSim((s) => {
-      const next = applyAndAdvance(s, []).state;
-      persistSimulationToBrowser(DEFAULT_SAVE_SLOT_ID, next);
-      return next;
-    });
-  }, []);
-
   const reset = useCallback(() => {
-    const next = createSimulation();
+    const next = createFinancialSimulation();
     setSim(next);
-    persistSimulationToBrowser(DEFAULT_SAVE_SLOT_ID, next);
+    persistSimulationToBrowser(MANUAL_FINANCIAL_SLOT_ID, next);
     setQueue([]);
   }, []);
 
@@ -255,13 +254,23 @@ export function SimDashboard() {
         action,
       }))
     );
-    persistSimulationToBrowser(DEFAULT_SAVE_SLOT_ID, next);
+    persistSimulationToBrowser(MANUAL_FINANCIAL_SLOT_ID, next);
   }, []);
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-8">
       <header className="border-b border-zinc-200 pb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Economy sim (SFC spike)</h1>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Manual simulation (SFC ledger)
+          </h1>
+          <Link
+            href="/"
+            className="text-sm font-medium text-zinc-700 underline-offset-4 hover:underline"
+          >
+            ← Home
+          </Link>
+        </div>
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
           <span className="rounded-md bg-zinc-100 px-2 py-1 font-mono">
             Period {latest.period}

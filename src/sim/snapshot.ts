@@ -102,7 +102,7 @@ export function accountDisplayFromPostings(postings: AccountPostings): AccountDi
   return out;
 }
 
-export type EconomyAggregates = {
+export type LedgerEconomyAggregates = {
   /** Bank deposits to HH + Firms — broad money; no physical cash in this model. */
   moneySupply: number;
   /** Bank loans to households and firms (private-sector debt to banks). */
@@ -124,7 +124,7 @@ export type EconomyAggregates = {
   bankEquity: number;
 };
 
-export function economyAggregates(postings: AccountPostings): EconomyAggregates {
+export function ledgerEconomyAggregates(postings: AccountPostings): LedgerEconomyAggregates {
   return {
     moneySupply: balance(postings, "hh.deposits") + balance(postings, "firms.deposits"),
     privateDebt: balance(postings, "hh.loans") + balance(postings, "firms.loans"),
@@ -149,18 +149,21 @@ export function economyAggregates(postings: AccountPostings): EconomyAggregates 
  * Derived UI/reporting snapshot: not persisted; built from {@link AccountPostings} on demand.
  * `period` is the simulation period index (0 = initial, N = after N completed advances).
  */
-export type EconomyView = {
+export type LedgerEconomyView = {
   period: number;
   accounts: AccountDisplay;
   sectors: SectorSnapshot[];
-  aggregates: EconomyAggregates;
+  aggregates: LedgerEconomyAggregates;
 };
 
-export function buildEconomyView(postings: AccountPostings, period: number): EconomyView {
+export function buildLedgerEconomyView(
+  postings: AccountPostings,
+  period: number
+): LedgerEconomyView {
   return {
     period,
     accounts: accountDisplayFromPostings(postings),
     sectors: sectorSnapshots(postings),
-    aggregates: economyAggregates(postings),
+    aggregates: ledgerEconomyAggregates(postings),
   };
 }

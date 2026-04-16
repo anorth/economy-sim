@@ -1,9 +1,4 @@
-import {
-  ACCOUNT_META,
-  type AccountId,
-  type AccountKind,
-  signedBalance,
-} from "./accounts";
+import { ACCOUNT_META, type AccountId, signedBalance } from "./accounts";
 
 export type JournalLine = { accountId: AccountId; debit: number; credit: number };
 

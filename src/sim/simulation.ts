@@ -7,7 +7,7 @@ import {
   validateJournalLines,
 } from "./postings";
 import { applyAction, linesForAction, type SimAction } from "./events";
-import { buildEconomyView, type EconomyView } from "./snapshot";
+import { buildLedgerEconomyView, type LedgerEconomyView } from "./snapshot";
 
 export type { AccountPostingsSeed };
 
@@ -27,7 +27,7 @@ export type ActionLogEntry = {
 };
 
 /**
- * Persisted simulation timeline (plus optional initial seed).
+ * Persisted financial simulation timeline (plus optional initial seed).
  *
  * Derivation order:
  * - `initialPostingsSeed` — starting chart-of-accounts totals (optional).
@@ -41,7 +41,7 @@ export type ActionLogEntry = {
  *
  * Completed period count = `periods.length`. Current book = `history[periods.length]`.
  */
-export type SimulationState = {
+export type FinancialSimulationState = {
   initialPostingsSeed: AccountPostingsSeed | undefined;
   /** Append-only source of truth for what happened each period. */
   periods: PeriodRecord[];
@@ -50,26 +50,26 @@ export type SimulationState = {
 };
 
 /** Book after the last completed advance (`history[history.length - 1]`). */
-export function currentPostings(state: SimulationState): AccountPostings {
+export function currentPostings(state: FinancialSimulationState): AccountPostings {
   return state.history[state.history.length - 1]!;
 }
 
-export function completedPeriodCount(state: SimulationState): number {
+export function completedPeriodCount(state: FinancialSimulationState): number {
   return state.periods.length;
 }
 
 /**
- * Validate persisted simulation invariants:
+ * Validate persisted financial simulation invariants:
  * - history has exactly one more frame than periods (initial + one per period)
  * - each stored period journal is balanced under double-entry rules
  *
  * This is intended for hydrate/load boundaries and sanity checks in tests.
  */
-export function validateSimulationState(state: SimulationState): void {
+export function validateFinancialSimulationState(state: FinancialSimulationState): void {
   const expectedHistoryLength = state.periods.length + 1;
   if (state.history.length !== expectedHistoryLength) {
     throw new Error(
-      `Invalid simulation state: history length ${state.history.length} does not match periods + 1 (${expectedHistoryLength})`
+      `Invalid financial simulation state: history length ${state.history.length} does not match periods + 1 (${expectedHistoryLength})`
     );
   }
   for (let i = 0; i < state.periods.length; i++) {
@@ -95,7 +95,7 @@ export function flattenActionLog(periodBatches: SimAction[][]): ActionLogEntry[]
   return out;
 }
 
-export function createSimulation(initial?: AccountPostingsSeed): SimulationState {
+export function createFinancialSimulation(initial?: AccountPostingsSeed): FinancialSimulationState {
   const h0 = emptyPostings(initial);
   return {
     initialPostingsSeed: initial,
@@ -105,7 +105,7 @@ export function createSimulation(initial?: AccountPostingsSeed): SimulationState
 }
 
 export type StepResult = {
-  state: SimulationState;
+  state: FinancialSimulationState;
 };
 
 function journalForActions(actions: SimAction[]): JournalLine[] {
@@ -116,14 +116,17 @@ function journalForActions(actions: SimAction[]): JournalLine[] {
  * Apply any number of actions in one period, then advance the clock.
  * All actions occur within the same accounting period before snapshotting.
  */
-export function applyAndAdvance(state: SimulationState, actions: SimAction[]): StepResult {
+export function applyAndAdvance(
+  state: FinancialSimulationState,
+  actions: SimAction[]
+): StepResult {
   const nextPostings = clonePostings(currentPostings(state));
   for (const a of actions) applyAction(nextPostings, a);
   const record: PeriodRecord = {
     actions: [...actions],
     journalLines: journalForActions(actions),
   };
-  const next: SimulationState = {
+  const next: FinancialSimulationState = {
     initialPostingsSeed: state.initialPostingsSeed,
     periods: [...state.periods, record],
     history: [...state.history, nextPostings],
@@ -131,7 +134,7 @@ export function applyAndAdvance(state: SimulationState, actions: SimAction[]): S
   return { state: next };
 }
 
-export function advanceOnly(state: SimulationState): StepResult {
+export function advanceOnly(state: FinancialSimulationState): StepResult {
   return applyAndAdvance(state, []);
 }
 
@@ -139,7 +142,7 @@ export function advanceOnly(state: SimulationState): StepResult {
  * Undo the last **period** (entire batch, including empty advances): drop last journal block and
  * last posting snapshot; the previous `history` tip becomes current.
  */
-export function undoLastPeriod(state: SimulationState): SimulationState {
+export function undoLastPeriod(state: FinancialSimulationState): FinancialSimulationState {
   if (state.periods.length === 0) {
     return state;
   }
@@ -150,7 +153,7 @@ export function undoLastPeriod(state: SimulationState): SimulationState {
   };
 }
 
-function assertValidPeriodIndex(state: SimulationState, periodIndex: number): void {
+function assertValidPeriodIndex(state: FinancialSimulationState, periodIndex: number): void {
   if (!Number.isInteger(periodIndex)) {
     throw new Error(`periodIndex must be an integer, got ${periodIndex}`);
   }
@@ -164,15 +167,21 @@ function assertValidPeriodIndex(state: SimulationState, periodIndex: number): vo
  * Point-in-time postings without mutating period stacks (for scrubber UI).
  * `periodIndex` 0 = initial book; must be ≤ `periods.length`.
  */
-export function postingsAtPeriod(state: SimulationState, periodIndex: number): AccountPostings {
+export function postingsAtPeriod(
+  state: FinancialSimulationState,
+  periodIndex: number
+): AccountPostings {
   assertValidPeriodIndex(state, periodIndex);
   return state.history[periodIndex]!;
 }
 
 /**
- * Derived economy view at a past period boundary.
+ * Derived ledger view at a past period boundary.
  * `periodIndex` 0 = initial; must be ≤ `periods.length`.
  */
-export function economyViewAtPeriod(state: SimulationState, periodIndex: number): EconomyView {
-  return buildEconomyView(postingsAtPeriod(state, periodIndex), periodIndex);
+export function ledgerEconomyViewAtPeriod(
+  state: FinancialSimulationState,
+  periodIndex: number
+): LedgerEconomyView {
+  return buildLedgerEconomyView(postingsAtPeriod(state, periodIndex), periodIndex);
 }

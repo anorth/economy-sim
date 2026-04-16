@@ -5,3 +5,5 @@ export * from "./snapshot";
 export * from "./simulation";
 export * from "./invariants";
 export * from "./saveGame";
+export * from "./automated";
+export * from "./automatedSave";

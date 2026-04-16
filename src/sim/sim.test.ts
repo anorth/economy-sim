@@ -4,18 +4,24 @@ import {
   advanceOnly,
   applyAndAdvance,
   completedPeriodCount,
-  createSimulation,
+  createFinancialSimulation,
   currentPostings,
-  economyViewAtPeriod,
+  ledgerEconomyViewAtPeriod,
   flattenActionLog,
   postingsAtPeriod,
   undoLastPeriod,
-  validateSimulationState,
+  validateFinancialSimulationState,
 } from "./simulation";
 import { assertClosedSystem } from "./invariants";
 import { applyJournalLines, balance, clonePostings, emptyPostings } from "./postings";
 import { linesForAction } from "./events";
-import { hydrateSimulationState } from "./saveGame";
+import { hydrateFinancialSimulationState } from "./saveGame";
+import {
+  applyAutomatedPeriod,
+  createAutomatedSimulation,
+  undoAutomatedLastPeriod,
+} from "./automated";
+import { hydrateAutomatedSimulationState } from "./automatedSave";
 
 describe("balanceDeltaFromLine", () => {
   it("uses normal-balance signs for each kind", () => {
@@ -30,7 +36,7 @@ describe("balanceDeltaFromLine", () => {
 
 describe("period batches and action log", () => {
   it("records one PeriodRecord per advance with journal lines", () => {
-    let s = createSimulation();
+    let s = createFinancialSimulation();
     expect(s.periods).toHaveLength(0);
     s = applyAndAdvance(s, [{ type: "fiatSpend", amount: 10, to: "households" }]).state;
     expect(s.periods).toHaveLength(1);
@@ -51,7 +57,7 @@ describe("period batches and action log", () => {
   });
 
   it("stores empty journal for an advance-only period", () => {
-    let s = createSimulation();
+    let s = createFinancialSimulation();
     s = advanceOnly(s).state;
     expect(s.periods).toHaveLength(1);
     expect(s.periods[0]!.actions).toHaveLength(0);
@@ -61,7 +67,7 @@ describe("period batches and action log", () => {
 
 describe("undo last period (snapshot stack, no replay)", () => {
   it("restores postings from previous history frame", () => {
-    let s = createSimulation();
+    let s = createFinancialSimulation();
     s = applyAndAdvance(s, [{ type: "fiatSpend", amount: 100, to: "households" }]).state;
     const mid = balance(currentPostings(s), "hh.deposits");
     s = applyAndAdvance(s, [{ type: "tax", amount: 10, from: "households" }]).state;
@@ -73,7 +79,7 @@ describe("undo last period (snapshot stack, no replay)", () => {
   });
 
   it("can undo an empty advance", () => {
-    let s = createSimulation();
+    let s = createFinancialSimulation();
     s = advanceOnly(s).state;
     expect(completedPeriodCount(s)).toBe(1);
     expect(s.history).toHaveLength(2);
@@ -84,7 +90,7 @@ describe("undo last period (snapshot stack, no replay)", () => {
   });
 
   it("is a no-op with nothing to undo", () => {
-    const s = createSimulation();
+    const s = createFinancialSimulation();
     const t = undoLastPeriod(s);
     expect(t.periods).toHaveLength(0);
   });
@@ -92,10 +98,10 @@ describe("undo last period (snapshot stack, no replay)", () => {
 
 describe("save game hydrate", () => {
   it("round-trips through JSON like localStorage would", () => {
-    let s = createSimulation();
+    let s = createFinancialSimulation();
     s = applyAndAdvance(s, [{ type: "fiatSpend", amount: 25, to: "households" }]).state;
     const json = JSON.stringify(s);
-    const back = hydrateSimulationState(JSON.parse(json) as unknown);
+    const back = hydrateFinancialSimulationState(JSON.parse(json) as unknown);
     expect(back.periods).toHaveLength(1);
     expect(balance(currentPostings(back), "hh.deposits")).toBe(
       balance(currentPostings(s), "hh.deposits")
@@ -105,20 +111,20 @@ describe("save game hydrate", () => {
 
 describe("state validation and period bounds", () => {
   it("accepts a valid state", () => {
-    let s = createSimulation();
+    let s = createFinancialSimulation();
     s = applyAndAdvance(s, [{ type: "fiatSpend", amount: 10, to: "households" }]).state;
-    expect(() => validateSimulationState(s)).not.toThrow();
+    expect(() => validateFinancialSimulationState(s)).not.toThrow();
   });
 
   it("rejects inconsistent history length", () => {
-    let s = createSimulation();
+    let s = createFinancialSimulation();
     s = applyAndAdvance(s, [{ type: "fiatSpend", amount: 10, to: "households" }]).state;
     const broken = { ...s, history: s.history.slice(1) };
-    expect(() => validateSimulationState(broken)).toThrow(/history length/i);
+    expect(() => validateFinancialSimulationState(broken)).toThrow(/history length/i);
   });
 
   it("rejects an unbalanced stored period journal", () => {
-    let s = createSimulation();
+    let s = createFinancialSimulation();
     s = applyAndAdvance(s, [{ type: "fiatSpend", amount: 10, to: "households" }]).state;
     const broken = {
       ...s,
@@ -130,21 +136,21 @@ describe("state validation and period bounds", () => {
         },
       ],
     };
-    expect(() => validateSimulationState(broken)).toThrow(/invalid period/i);
+    expect(() => validateFinancialSimulationState(broken)).toThrow(/invalid period/i);
   });
 
   it("checks period index bounds for postings and derived view", () => {
-    let s = createSimulation();
+    let s = createFinancialSimulation();
     s = applyAndAdvance(s, [{ type: "fiatSpend", amount: 10, to: "households" }]).state;
     expect(() => postingsAtPeriod(s, -1)).toThrow(/out of bounds/i);
     expect(() => postingsAtPeriod(s, 2)).toThrow(/out of bounds/i);
-    expect(() => economyViewAtPeriod(s, 2)).toThrow(/out of bounds/i);
+    expect(() => ledgerEconomyViewAtPeriod(s, 2)).toThrow(/out of bounds/i);
   });
 });
 
 describe("history posting round-trip", () => {
   it("clonePostings matches current book after advance", () => {
-    const a = applyAndAdvance(createSimulation(), [
+    const a = applyAndAdvance(createFinancialSimulation(), [
       { type: "fiatSpend", amount: 42, to: "households" },
     ]).state;
     const p = currentPostings(a);
@@ -180,6 +186,8 @@ describe("linesForAction", () => {
       { type: "treasuryPayCouponToBanks" as const, amount: 1 },
       { type: "banksSellBondsToHouseholds" as const, amount: 1 },
       { type: "banksSellBondsToFirms" as const, amount: 1 },
+      { type: "payWages" as const, amount: 1 },
+      { type: "householdConsumption" as const, amount: 1 },
     ];
     for (const a of samples) {
       const lines = linesForAction(a);
@@ -196,21 +204,21 @@ describe("linesForAction", () => {
 
 describe("closed system invariant", () => {
   it("holds for fiat spend to households", () => {
-    const { state } = applyAndAdvance(createSimulation(), [
+    const { state } = applyAndAdvance(createFinancialSimulation(), [
       { type: "fiatSpend", amount: 100, to: "households" },
     ]);
     assertClosedSystem(currentPostings(state));
   });
 
   it("holds for bank loan to households", () => {
-    const { state } = applyAndAdvance(createSimulation(), [
+    const { state } = applyAndAdvance(createFinancialSimulation(), [
       { type: "bankLoanHouseholds", amount: 50 },
     ]);
     assertClosedSystem(currentPostings(state));
   });
 
   it("holds for a chain: loan, fiat, tax, bonds, OMO, coupon, retail bond sale", () => {
-    let s = createSimulation();
+    let s = createFinancialSimulation();
     const steps = [
       [{ type: "bankLoanHouseholds" as const, amount: 200 }],
       [{ type: "fiatSpend" as const, amount: 100, to: "households" as const }],
@@ -229,7 +237,7 @@ describe("closed system invariant", () => {
 
 describe("economic semantics", () => {
   it("fiat spend increases household deposits and equity", () => {
-    const { state } = applyAndAdvance(createSimulation(), [
+    const { state } = applyAndAdvance(createFinancialSimulation(), [
       { type: "fiatSpend", amount: 100, to: "households" },
     ]);
     const p = currentPostings(state);
@@ -239,7 +247,7 @@ describe("economic semantics", () => {
   });
 
   it("bank loan does not change household net financial assets", () => {
-    const { state } = applyAndAdvance(createSimulation(), [
+    const { state } = applyAndAdvance(createFinancialSimulation(), [
       { type: "bankLoanHouseholds", amount: 100 },
     ]);
     const p = currentPostings(state);
@@ -249,7 +257,7 @@ describe("economic semantics", () => {
   });
 
   it("primary bond sale moves bonds to banks and reserves to Treasury (via CB)", () => {
-    let s = createSimulation();
+    let s = createFinancialSimulation();
     s = applyAndAdvance(s, [{ type: "fiatSpend", amount: 500, to: "households" }]).state;
     const reservesBefore = balance(currentPostings(s), "banks.reserves");
     s = applyAndAdvance(s, [{ type: "treasurySellBondsToBanks", amount: 100 }]).state;
@@ -261,7 +269,7 @@ describe("economic semantics", () => {
   });
 
   it("banks selling bonds to households destroys deposits", () => {
-    let s = createSimulation();
+    let s = createFinancialSimulation();
     s = applyAndAdvance(s, [
       { type: "fiatSpend", amount: 200, to: "households" },
       { type: "treasurySellBondsToBanks", amount: 200 },
@@ -271,5 +279,68 @@ describe("economic semantics", () => {
     const p = currentPostings(s);
     expect(balance(p, "hh.deposits")).toBe(depBefore - 50);
     expect(balance(p, "hh.bonds")).toBe(50);
+  });
+});
+
+describe("labour actions", () => {
+  it("payWages moves deposits and equity between firms and households", () => {
+    let s = createFinancialSimulation();
+    s = applyAndAdvance(s, [{ type: "bankLoanFirms", amount: 100 }]).state;
+    s = applyAndAdvance(s, [{ type: "payWages", amount: 40 }]).state;
+    const p = currentPostings(s);
+    expect(balance(p, "hh.deposits")).toBe(40);
+    expect(balance(p, "firms.deposits")).toBe(60);
+    assertClosedSystem(p);
+  });
+
+  it("householdConsumption moves deposits from households to firms", () => {
+    let s = createFinancialSimulation();
+    s = applyAndAdvance(s, [{ type: "fiatSpend", amount: 50, to: "households" }]).state;
+    s = applyAndAdvance(s, [{ type: "householdConsumption", amount: 20 }]).state;
+    const p = currentPostings(s);
+    expect(balance(p, "hh.deposits")).toBe(30);
+    expect(balance(p, "firms.deposits")).toBe(20);
+    assertClosedSystem(p);
+  });
+});
+
+describe("automated labour phase 1", () => {
+  it("runs a period as one action batch and keeps realHistory aligned", () => {
+    let auto = createAutomatedSimulation({
+      fiatSpendToHouseholdsPerPeriod: 0,
+      autoBorrowForPayroll: true,
+      householdIncomeTaxRate: 0,
+      consumptionPropensityFromDeposits: 0.5,
+    });
+    expect(auto.realHistory).toHaveLength(1);
+    expect(auto.financial.history).toHaveLength(1);
+    auto = applyAutomatedPeriod(auto).state;
+    expect(auto.financial.periods).toHaveLength(1);
+    expect(auto.realHistory).toHaveLength(2);
+    expect(auto.financial.history).toHaveLength(2);
+    expect(auto.realHistory[1]!.employment).toBeGreaterThan(0);
+    assertClosedSystem(currentPostings(auto.financial));
+  });
+
+  it("undo restores financial and real history together", () => {
+    let auto = createAutomatedSimulation();
+    const beforeReal = auto.realHistory[0]!.expectedSales;
+    auto = applyAutomatedPeriod(auto).state;
+    auto = undoAutomatedLastPeriod(auto);
+    expect(auto.financial.periods).toHaveLength(0);
+    expect(auto.realHistory).toHaveLength(1);
+    expect(auto.realHistory[0]!.expectedSales).toBe(beforeReal);
+  });
+
+  it("round-trips automated save envelope JSON", () => {
+    let auto = createAutomatedSimulation();
+    auto = applyAutomatedPeriod(auto).state;
+    const json = JSON.stringify(auto);
+    const back = hydrateAutomatedSimulationState(JSON.parse(json) as unknown);
+    expect(back.financial.periods).toHaveLength(1);
+    expect(back.realHistory).toHaveLength(2);
+    expect(balance(currentPostings(back.financial), "hh.deposits")).toBe(
+      balance(currentPostings(auto.financial), "hh.deposits")
+    );
   });
 });
