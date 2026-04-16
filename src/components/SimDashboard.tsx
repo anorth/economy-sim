@@ -151,13 +151,13 @@ function AleHistoryCell({
   entries: Array<{ line: JournalLine; delta: number }>;
 }) {
   if (entries.length === 0) {
-    return <span className="text-zinc-300 dark:text-zinc-600">—</span>;
+    return <span className="text-zinc-300">—</span>;
   }
   return (
     <div className="flex flex-col gap-2 py-1">
       {entries.map(({ line, delta }, i) => (
-        <div key={`${line.accountId}-${i}`} className="font-medium leading-snug text-zinc-900 dark:text-zinc-100" >
-          <span className="font-mono text-sm font-normal tabular-nums text-zinc-700 dark:text-zinc-300">
+        <div key={`${line.accountId}-${i}`} className="font-medium leading-snug text-zinc-900" >
+          <span className="font-mono text-sm font-normal tabular-nums text-zinc-700">
             {formatSignedDelta(delta)}
           </span>
           &nbsp;
@@ -260,17 +260,17 @@ export function SimDashboard() {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-8">
-      <header className="border-b border-zinc-200 pb-6 dark:border-zinc-800">
+      <header className="border-b border-zinc-200 pb-6">
         <h1 className="text-2xl font-semibold tracking-tight">Economy sim (SFC spike)</h1>
         <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-          <span className="rounded-md bg-zinc-100 px-2 py-1 font-mono dark:bg-zinc-900">
+          <span className="rounded-md bg-zinc-100 px-2 py-1 font-mono">
             Period {latest.period}
           </span>
           <span
             className={
               Math.abs(sectorSum) < 1e-3
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-amber-600 dark:text-amber-400"
+                ? "text-emerald-600"
+                : "text-amber-600"
             }
           >
             Σ sector (A − L) = {fmt(sectorSum)}
@@ -279,7 +279,7 @@ export function SimDashboard() {
       </header>
 
       <section className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+        <div className="rounded-xl border border-zinc-200 p-4">
           <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
             Actions this period
           </h2>
@@ -287,7 +287,7 @@ export function SimDashboard() {
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-zinc-500">Action</span>
               <select
-                className="rounded-md border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
+                className="rounded-md border border-zinc-300 bg-white px-3 py-2"
                 value={actionType}
                 onChange={(e) => setActionType(e.target.value as SimAction["type"])}
               >
@@ -348,7 +348,7 @@ export function SimDashboard() {
                 type="number"
                 min={0}
                 step="any"
-                className="rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono dark:border-zinc-700 dark:bg-zinc-950"
+                className="rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
               />
@@ -356,13 +356,13 @@ export function SimDashboard() {
 
             <button
               type="button"
-              className="rounded-md bg-zinc-900 px-4 py-2 text-sm text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+              className="rounded-md bg-zinc-900 px-4 py-2 text-sm text-white hover:bg-zinc-800"
               onClick={addToQueue}
             >
               Add to queue
             </button>
             {queue.length > 0 && (
-              <ul className="space-y-1 rounded-md border border-dashed border-zinc-300 p-3 text-sm dark:border-zinc-700">
+              <ul className="space-y-1 rounded-md border border-dashed border-zinc-300 p-3 text-sm">
                 {queue.map((item) => (
                   <li
                     key={item.id}
@@ -372,7 +372,7 @@ export function SimDashboard() {
                     <button
                       type="button"
                       onClick={() => removeFromQueue(item.id)}
-                      className="shrink-0 rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-800 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                      className="shrink-0 rounded p-0.5 text-zinc-400 transition-colors hover:bg-zinc-200 hover:text-zinc-800"
                       aria-label="Remove from queue"
                     >
                       <QueueRemoveIcon />
@@ -392,14 +392,14 @@ export function SimDashboard() {
               <button
                 type="button"
                 disabled={sim.periods.length === 0}
-                className="rounded-md border border-amber-300 px-4 py-2 text-sm text-amber-900 disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-800 dark:text-amber-200"
+                className="rounded-md border border-amber-300 px-4 py-2 text-sm text-amber-900 disabled:cursor-not-allowed disabled:opacity-40"
                 onClick={undoPeriod}
               >
                 Undo last period
               </button>
               <button
                 type="button"
-                className="rounded-md border border-red-300 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/50"
+                className="rounded-md border border-red-300 px-4 py-2 text-sm text-red-700 hover:bg-red-50"
                 onClick={reset}
               >
                 Reset simulation
@@ -408,7 +408,7 @@ export function SimDashboard() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+        <div className="rounded-xl border border-zinc-200 p-4">
           <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">Aggregates</h2>
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <dt className="text-zinc-500">Money supply (sum of deposits)</dt>
@@ -425,7 +425,7 @@ export function SimDashboard() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+      <section className="rounded-xl border border-zinc-200 p-4">
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">Time series</h2>
         <p className="mt-1 text-xs text-zinc-500">
           Stocks each period: money supply, private debt, public debt, and sector equity (households,
@@ -494,7 +494,7 @@ export function SimDashboard() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+      <section className="rounded-xl border border-zinc-200 p-4">
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">Action history</h2>
         {actionLog.length === 0 ? (
           <p className="mt-4 text-sm text-zinc-500">No actions recorded yet.</p>
@@ -506,11 +506,11 @@ export function SimDashboard() {
               return (
                 <div
                   key={entry.seq}
-                  className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
+                  className="overflow-hidden rounded-lg border border-zinc-200"
                 >
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[52rem] text-left text-sm">
-                      <thead className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/80">
+                      <thead className="border-b border-zinc-200 bg-zinc-50">
                         <tr>
                           <th className="w-[12rem] py-2 pl-3 pr-3 font-normal text-zinc-500">
                             Event
@@ -530,28 +530,28 @@ export function SimDashboard() {
                           return (
                             <tr
                               key={`${entry.seq}-${idx}`}
-                              className="border-b border-zinc-100 dark:border-zinc-800/80"
+                              className="border-b border-zinc-100"
                             >
                               {idx === 0 && (
                                 <td
                                   rowSpan={pairs.length}
-                                  className="align-top border-r border-zinc-100 bg-zinc-50/80 py-2 pl-3 pr-3 dark:border-zinc-800 dark:bg-zinc-900/40"
+                                  className="align-top border-r border-zinc-100 bg-zinc-50/80 py-2 pl-3 pr-3"
                                 >
                                   <div className="font-mono text-xs text-zinc-500">
                                     #{entry.seq + 1} · period {entry.periodAfter}
                                   </div>
-                                  <div className="mt-1 font-medium leading-snug text-zinc-900 dark:text-zinc-100">
+                                  <div className="mt-1 font-medium leading-snug text-zinc-900">
                                     {describeAction(entry.action)}
                                   </div>
                                 </td>
                               )}
-                              <td className="align-top border-r border-zinc-100 py-2 pl-2 pr-3 text-sm font-medium text-zinc-800 dark:border-zinc-800 dark:text-zinc-200">
+                              <td className="align-top border-r border-zinc-100 py-2 pl-2 pr-3 text-sm font-medium text-zinc-800">
                                 {sectorName}
                               </td>
-                              <td className="align-top border-r border-zinc-50 py-1 pl-2 pr-3 dark:border-zinc-800/80">
+                              <td className="align-top border-r border-zinc-50 py-1 pl-2 pr-3">
                                 <AleHistoryCell entries={ale.asset} />
                               </td>
-                              <td className="align-top border-r border-zinc-50 py-1 pl-2 pr-3 dark:border-zinc-800/80">
+                              <td className="align-top border-r border-zinc-50 py-1 pl-2 pr-3">
                                 <AleHistoryCell entries={ale.liability} />
                               </td>
                               <td className="align-top py-1 pl-2 pr-3">
@@ -570,7 +570,7 @@ export function SimDashboard() {
         )}
       </section>
 
-      <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+      <section className="rounded-xl border border-zinc-200 p-4">
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
           Sectors &amp; chart of accounts
         </h2>
@@ -579,9 +579,9 @@ export function SimDashboard() {
           Assets, Liabilities, or Equity by account type. A − L should match equity when the
           sector balances.
         </p>
-        <div className="mt-4 max-h-[min(70vh,42rem)] overflow-auto rounded-md border border-zinc-100 dark:border-zinc-800">
+        <div className="mt-4 max-h-[min(70vh,42rem)] overflow-auto rounded-md border border-zinc-100">
           <table className="w-full min-w-[36rem] text-left text-sm">
-            <thead className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
+            <thead className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50">
               <tr>
                 <th className="py-2 pl-3 pr-4">Sector / account</th>
                 <th className="py-2 pr-3 text-right font-normal">Assets</th>
@@ -593,24 +593,24 @@ export function SimDashboard() {
             <tbody>
               {latest.sectors.map((s) => (
                 <Fragment key={s.sector}>
-                  <tr className="border-t border-zinc-200 bg-zinc-100/80 dark:border-zinc-700 dark:bg-zinc-800/50">
+                  <tr className="border-t border-zinc-200 bg-zinc-100/80">
                     <td className="py-2.5 pl-3 pr-4 font-semibold tracking-tight">{s.sector}</td>
                     <td className="py-2.5 pr-3 text-right font-mono text-sm">{fmt(s.assets)}</td>
                     <td className="py-2.5 pr-3 text-right font-mono text-sm">{fmt(s.liabilities)}</td>
                     <td className="py-2.5 pr-3 text-right font-mono text-sm">{fmt(s.equity)}</td>
-                    <td className="py-2.5 pr-3 text-right font-mono text-sm text-zinc-600 dark:text-zinc-400">
+                    <td className="py-2.5 pr-3 text-right font-mono text-sm text-zinc-600">
                       {fmt(s.netFinancialAssets)}
                     </td>
                   </tr>
                   {s.accounts.map((a) => (
                     <tr
                       key={a.id}
-                      className="border-b border-zinc-100 dark:border-zinc-800/80"
+                      className="border-b border-zinc-100"
                     >
                       <td className="py-1.5 pl-6 pr-4">
                         <span className="font-mono text-xs text-zinc-500">{a.id}</span>
                         <span className="text-zinc-400"> · </span>
-                        <span className="text-zinc-700 dark:text-zinc-300">{a.label}</span>
+                        <span className="text-zinc-700">{a.label}</span>
                       </td>
                       <td className="py-1.5 pr-3 text-right font-mono text-xs">
                         {a.kind === "asset" ? fmt(a.balance) : "—"}
