@@ -35,6 +35,7 @@ function normalizeRealEconomyState(raw: unknown): RealEconomyState {
     labourForce: num("labourForce", DEFAULT_REAL_ECONOMY_STATE.labourForce),
     employment: num("employment", DEFAULT_REAL_ECONOMY_STATE.employment),
     moneyWage: num("moneyWage", DEFAULT_REAL_ECONOMY_STATE.moneyWage),
+    priceLevel: num("priceLevel", DEFAULT_REAL_ECONOMY_STATE.priceLevel),
     labourProductivity: num("labourProductivity", DEFAULT_REAL_ECONOMY_STATE.labourProductivity),
     expectedSales: num("expectedSales", DEFAULT_REAL_ECONOMY_STATE.expectedSales),
     lastPeriodOutput: num("lastPeriodOutput", DEFAULT_REAL_ECONOMY_STATE.lastPeriodOutput),

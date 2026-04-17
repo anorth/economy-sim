@@ -305,6 +305,30 @@ describe("labour actions", () => {
 });
 
 describe("automated labour phase 1", () => {
+  it("uses the explicit price level to convert money demand into real consumption", () => {
+    let auto = createAutomatedSimulation(
+      {
+        fiatSpendToHouseholdsPerPeriod: 0,
+        autoBorrowForPayroll: true,
+        householdIncomeTaxRate: 0,
+        consumptionPropensityFromDeposits: 0.75,
+        salesExpectationAdaptation: 0.3,
+      },
+      {
+        labourForce: 100,
+        moneyWage: 100,
+        priceLevel: 100,
+        labourProductivity: 1,
+        expectedSales: 80,
+      }
+    );
+    auto = applyAutomatedPeriod(auto).state;
+    expect(auto.realHistory[1]!.employment).toBe(80);
+    expect(auto.realHistory[1]!.lastPeriodWageBill).toBe(8000);
+    expect(auto.realHistory[1]!.lastPeriodConsumption).toBe(60);
+    expect(balance(currentPostings(auto.financial), "hh.deposits")).toBe(2000);
+  });
+
   it("runs a period as one action batch and keeps realHistory aligned", () => {
     let auto = createAutomatedSimulation({
       fiatSpendToHouseholdsPerPeriod: 0,
@@ -339,6 +363,7 @@ describe("automated labour phase 1", () => {
     const back = hydrateAutomatedSimulationState(JSON.parse(json) as unknown);
     expect(back.financial.periods).toHaveLength(1);
     expect(back.realHistory).toHaveLength(2);
+    expect(back.realHistory[0]!.priceLevel).toBe(auto.realHistory[0]!.priceLevel);
     expect(balance(currentPostings(back.financial), "hh.deposits")).toBe(
       balance(currentPostings(auto.financial), "hh.deposits")
     );

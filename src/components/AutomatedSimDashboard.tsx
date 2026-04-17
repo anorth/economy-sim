@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CartesianGrid,
   Legend,
@@ -12,6 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { LINE_CHART_ANIMATION_MS } from "./chartAnimation";
 import {
   applyAutomatedPeriod,
   AUTOMATED_SLOT_ID,
@@ -19,6 +20,8 @@ import {
   createAutomatedSimulation,
   currentPostings,
   currentReal,
+  DEFAULT_LABOUR_PHASE1_POLICY,
+  DEFAULT_REAL_ECONOMY_STATE,
   describeAction,
   flattenActionLog,
   ledgerEconomyAggregates,
@@ -28,10 +31,38 @@ import {
   undoAutomatedLastPeriod,
   type AutomatedSimulationState,
   type LabourPhase1Policy,
+  type RealEconomyState,
 } from "@/sim";
 
 function fmt(n: number) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function fmtPct(n: number) {
+  return `${(n * 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+}
+
+function clampUnitInterval(n: number) {
+  return Math.min(1, Math.max(0, n));
+}
+
+function MetricList({ children }: { children: ReactNode }) {
+  return <dl className="mt-3 space-y-2 text-sm">{children}</dl>;
+}
+
+function MetricRow({
+  label,
+  value,
+}: {
+  label: ReactNode;
+  value: ReactNode;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <dt className="min-w-0 flex-1 text-zinc-500">{label}</dt>
+      <dd className="shrink-0 text-right font-mono">{value}</dd>
+    </div>
+  );
 }
 
 export function AutomatedSimDashboard() {
@@ -46,6 +77,7 @@ export function AutomatedSimDashboard() {
   useEffect(() => {
     simRef.current = state;
   }, [state]);
+  const [initialPanelOpen, setInitialPanelOpen] = useState(false);
 
   const latest = useMemo(
     () =>
@@ -57,6 +89,9 @@ export function AutomatedSimDashboard() {
   );
 
   const real = useMemo(() => currentReal(state), [state]);
+  const initialReal = state.realHistory[0]!;
+  const hasHistory = state.financial.periods.length > 0;
+  const employmentRate = real.labourForce > 0 ? real.employment / real.labourForce : 0;
 
   const chartData = useMemo(() => {
     return state.financial.history.map((postings, periodIndex) => {
@@ -92,8 +127,42 @@ export function AutomatedSimDashboard() {
     [persist, state]
   );
 
-  const runPeriod = useCallback(() => {
-    persist(applyAutomatedPeriod(simRef.current).state);
+  const updateInitialReal = useCallback(
+    (patch: Partial<RealEconomyState>) => {
+      const current = simRef.current;
+      if (current.financial.periods.length > 0) return;
+      const nextInitial = { ...current.realHistory[0]!, ...patch };
+      persist({
+        ...current,
+        realHistory: [nextInitial],
+      });
+    },
+    [persist]
+  );
+
+  const setInitialDefaults = useCallback(() => {
+    const current = simRef.current;
+    if (current.financial.periods.length > 0) return;
+    persist({
+      ...current,
+      realHistory: [{ ...DEFAULT_REAL_ECONOMY_STATE }],
+    });
+  }, [persist]);
+
+  const setPolicyDefaults = useCallback(() => {
+    const current = simRef.current;
+    persist({
+      ...current,
+      policy: { ...DEFAULT_LABOUR_PHASE1_POLICY },
+    });
+  }, [persist]);
+
+  const stepMany = useCallback((count: number) => {
+    let next = simRef.current;
+    for (let i = 0; i < count; i++) {
+      next = applyAutomatedPeriod(next).state;
+    }
+    persist(next);
   }, [persist]);
 
   const undo = useCallback(() => {
@@ -101,7 +170,8 @@ export function AutomatedSimDashboard() {
   }, [persist]);
 
   const reset = useCallback(() => {
-    persist(createAutomatedSimulation());
+    const current = simRef.current;
+    persist(createAutomatedSimulation(current.policy, current.realHistory[0]));
   }, [persist]);
 
   return (
@@ -128,14 +198,127 @@ export function AutomatedSimDashboard() {
           <span className="rounded-md bg-zinc-100 px-2 py-1 font-mono">
             Period {latest.period}
           </span>
-          <span className="text-zinc-600">
-            Employment {fmt(real.employment)} / labour force {fmt(real.labourForce)}
-          </span>
         </div>
       </header>
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl border border-zinc-200 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
+              Initial conditions
+            </h2>
+            <button
+              type="button"
+              className="shrink-0 text-sm font-medium text-zinc-600 underline-offset-2 hover:text-zinc-900 hover:underline"
+              onClick={() => setInitialPanelOpen((open) => !open)}
+              aria-expanded={initialPanelOpen}
+            >
+              {initialPanelOpen ? "Hide" : "Show"}
+            </button>
+          </div>
+          {initialPanelOpen && (
+            <div className="mt-4 grid gap-3 text-sm">
+              <label className="flex flex-col gap-1">
+                <span className="text-zinc-500">Labour force</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="any"
+                  disabled={hasHistory}
+                  className="rounded-md border border-zinc-300 px-3 py-2 font-mono disabled:bg-zinc-100"
+                  value={initialReal.labourForce}
+                  onChange={(e) =>
+                    updateInitialReal({ labourForce: Math.max(0, Number(e.target.value) || 0) })
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-zinc-500">Initial employment</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="any"
+                  disabled={hasHistory}
+                  className="rounded-md border border-zinc-300 px-3 py-2 font-mono disabled:bg-zinc-100"
+                  value={initialReal.employment}
+                  onChange={(e) =>
+                    updateInitialReal({ employment: Math.max(0, Number(e.target.value) || 0) })
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-zinc-500">Money wage</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="any"
+                  disabled={hasHistory}
+                  className="rounded-md border border-zinc-300 px-3 py-2 font-mono disabled:bg-zinc-100"
+                  value={initialReal.moneyWage}
+                  onChange={(e) =>
+                    updateInitialReal({ moneyWage: Math.max(0, Number(e.target.value) || 0) })
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-zinc-500">Price level</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="any"
+                  disabled={hasHistory}
+                  className="rounded-md border border-zinc-300 px-3 py-2 font-mono disabled:bg-zinc-100"
+                  value={initialReal.priceLevel}
+                  onChange={(e) =>
+                    updateInitialReal({ priceLevel: Math.max(0, Number(e.target.value) || 0) })
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-zinc-500">Labour productivity</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="any"
+                  disabled={hasHistory}
+                  className="rounded-md border border-zinc-300 px-3 py-2 font-mono disabled:bg-zinc-100"
+                  value={initialReal.labourProductivity}
+                  onChange={(e) =>
+                    updateInitialReal({
+                      labourProductivity: Math.max(0, Number(e.target.value) || 0),
+                    })
+                  }
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-zinc-500">Initial expected sales</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="any"
+                  disabled={hasHistory}
+                  className="rounded-md border border-zinc-300 px-3 py-2 font-mono disabled:bg-zinc-100"
+                  value={initialReal.expectedSales}
+                  onChange={(e) =>
+                    updateInitialReal({
+                      expectedSales: Math.max(0, Number(e.target.value) || 0),
+                    })
+                  }
+                />
+              </label>
+              <div className="pt-1">
+                <button
+                  type="button"
+                  disabled={hasHistory}
+                  className="text-sm font-medium text-zinc-600 underline-offset-2 hover:text-zinc-900 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline"
+                  onClick={setInitialDefaults}
+                >
+                  Set default
+                </button>
+              </div>
+            </div>
+          )}
+          <hr className="my-6 border-t border-zinc-200" />
           <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
             Policy & constants
           </h2>
@@ -174,10 +357,7 @@ export function AutomatedSimDashboard() {
                 value={state.policy.householdIncomeTaxRate}
                 onChange={(e) =>
                   updatePolicy({
-                    householdIncomeTaxRate: Math.min(
-                      1,
-                      Math.max(0, Number(e.target.value) || 0)
-                    ),
+                    householdIncomeTaxRate: clampUnitInterval(Number(e.target.value) || 0),
                   })
                 }
               />
@@ -193,9 +373,8 @@ export function AutomatedSimDashboard() {
                 value={state.policy.consumptionPropensityFromDeposits}
                 onChange={(e) =>
                   updatePolicy({
-                    consumptionPropensityFromDeposits: Math.min(
-                      1,
-                      Math.max(0, Number(e.target.value) || 0)
+                    consumptionPropensityFromDeposits: clampUnitInterval(
+                      Number(e.target.value) || 0
                     ),
                   })
                 }
@@ -212,22 +391,42 @@ export function AutomatedSimDashboard() {
                 value={state.policy.salesExpectationAdaptation}
                 onChange={(e) =>
                   updatePolicy({
-                    salesExpectationAdaptation: Math.min(
-                      1,
-                      Math.max(0, Number(e.target.value) || 0)
-                    ),
+                    salesExpectationAdaptation: clampUnitInterval(Number(e.target.value) || 0),
                   })
                 }
               />
             </label>
           </div>
-          <div className="mt-4 flex flex-wrap gap-2 border-t border-zinc-100 pt-4">
+          <div className="mt-4">
+            <button
+              type="button"
+              className="text-sm font-medium text-zinc-600 underline-offset-2 hover:text-zinc-900 hover:underline"
+              onClick={setPolicyDefaults}
+            >
+              Set default
+            </button>
+          </div>
+          <div className="mt-6 flex flex-wrap gap-2 border-t border-zinc-100 pt-4">
             <button
               type="button"
               className="rounded-md bg-emerald-800 px-4 py-2 text-sm text-white hover:bg-emerald-700"
-              onClick={runPeriod}
+              onClick={() => stepMany(1)}
             >
-              Run one period
+              Step
+            </button>
+            <button
+              type="button"
+              className="rounded-md bg-emerald-700 px-4 py-2 text-sm text-white hover:bg-emerald-600"
+              onClick={() => stepMany(10)}
+            >
+              +10
+            </button>
+            <button
+              type="button"
+              className="rounded-md bg-emerald-600 px-4 py-2 text-sm text-white hover:bg-emerald-500"
+              onClick={() => stepMany(100)}
+            >
+              +100
             </button>
             <button
               type="button"
@@ -251,24 +450,21 @@ export function AutomatedSimDashboard() {
           <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
             Real economy (this period)
           </h2>
-          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <dt className="text-zinc-500">Money wage</dt>
-            <dd className="text-right font-mono">{fmt(real.moneyWage)}</dd>
-            <dt className="text-zinc-500">Labour productivity</dt>
-            <dd className="text-right font-mono">{fmt(real.labourProductivity)}</dd>
-            <dt className="text-zinc-500">Expected sales (units)</dt>
-            <dd className="text-right font-mono">{fmt(real.expectedSales)}</dd>
-            <dt className="text-zinc-500">Last wage bill</dt>
-            <dd className="text-right font-mono">{fmt(real.lastPeriodWageBill)}</dd>
-            <dt className="text-zinc-500">Last consumption</dt>
-            <dd className="text-right font-mono">{fmt(real.lastPeriodConsumption)}</dd>
-            <dt className="text-zinc-500">Last output</dt>
-            <dd className="text-right font-mono">{fmt(real.lastPeriodOutput)}</dd>
-          </dl>
-          <p className="mt-4 text-xs text-zinc-500">
-            Labour force, wage, and productivity are fixed in phase 1; edit initial real state in code
-            or extend the UI later.
-          </p>
+          <MetricList>
+            <MetricRow label="Labour force" value={fmt(real.labourForce)} />
+            <MetricRow label="Employment" value={fmt(real.employment)} />
+            <MetricRow label="Employment rate" value={fmtPct(employmentRate)} />
+            <MetricRow
+              label="Labour productivity (output per labour unit)"
+              value={fmt(real.labourProductivity)}
+            />
+            <MetricRow label="Money wage (cost per labour unit)" value={fmt(real.moneyWage)} />
+            <MetricRow label="Price level" value={fmt(real.priceLevel)} />
+            <MetricRow label="Expected sales (units)" value={fmt(real.expectedSales)} />
+            <MetricRow label="Last output" value={fmt(real.lastPeriodOutput)} />
+            <MetricRow label="Last wage bill" value={fmt(real.lastPeriodWageBill)} />
+            <MetricRow label="Last consumption" value={fmt(real.lastPeriodConsumption)} />
+          </MetricList>
         </div>
       </section>
 
@@ -276,16 +472,12 @@ export function AutomatedSimDashboard() {
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
           Financial aggregates (ledger)
         </h2>
-        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-          <dt className="text-zinc-500">Money supply</dt>
-          <dd className="text-right font-mono">{fmt(latest.aggregates.moneySupply)}</dd>
-          <dt className="text-zinc-500">Private debt</dt>
-          <dd className="text-right font-mono">{fmt(latest.aggregates.privateDebt)}</dd>
-          <dt className="text-zinc-500">Household equity</dt>
-          <dd className="text-right font-mono">{fmt(latest.aggregates.hhEquity)}</dd>
-          <dt className="text-zinc-500">Firm equity</dt>
-          <dd className="text-right font-mono">{fmt(latest.aggregates.firmEquity)}</dd>
-        </dl>
+        <MetricList>
+          <MetricRow label="Money supply" value={fmt(latest.aggregates.moneySupply)} />
+          <MetricRow label="Private debt" value={fmt(latest.aggregates.privateDebt)} />
+          <MetricRow label="Household equity" value={fmt(latest.aggregates.hhEquity)} />
+          <MetricRow label="Firm equity" value={fmt(latest.aggregates.firmEquity)} />
+        </MetricList>
       </section>
 
       <section className="rounded-xl border border-zinc-200 p-4">
@@ -306,6 +498,7 @@ export function AutomatedSimDashboard() {
                 name="Money supply"
                 stroke="#2563eb"
                 dot={false}
+                animationDuration={LINE_CHART_ANIMATION_MS}
               />
               <Line
                 yAxisId="left"
@@ -314,6 +507,7 @@ export function AutomatedSimDashboard() {
                 name="Employment"
                 stroke="#15803d"
                 dot={false}
+                animationDuration={LINE_CHART_ANIMATION_MS}
               />
               <Line
                 yAxisId="right"
@@ -322,6 +516,7 @@ export function AutomatedSimDashboard() {
                 name="Consumption"
                 stroke="#ca8a04"
                 dot={false}
+                animationDuration={LINE_CHART_ANIMATION_MS}
               />
             </LineChart>
           </ResponsiveContainer>

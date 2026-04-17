@@ -21,11 +21,12 @@ export function currentReal(state: AutomatedSimulationState): RealEconomyState {
 }
 
 export function createAutomatedSimulation(
-  policyOverrides?: Partial<LabourPhase1Policy>
+  policyOverrides?: Partial<LabourPhase1Policy>,
+  initialRealOverrides?: Partial<RealEconomyState>
 ): AutomatedSimulationState {
   return {
     financial: createFinancialSimulation(),
-    realHistory: [{ ...DEFAULT_REAL_ECONOMY_STATE }],
+    realHistory: [{ ...DEFAULT_REAL_ECONOMY_STATE, ...initialRealOverrides }],
     policy: { ...DEFAULT_LABOUR_PHASE1_POLICY, ...policyOverrides },
   };
 }

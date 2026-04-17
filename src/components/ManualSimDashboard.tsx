@@ -12,6 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { LINE_CHART_ANIMATION_MS } from "./chartAnimation";
 import {
   ACCOUNT_META,
   balanceDeltaFromLine,
@@ -454,6 +455,7 @@ export function ManualSimDashboard() {
                 name="Money supply"
                 stroke="#2563eb"
                 dot={false}
+                animationDuration={LINE_CHART_ANIMATION_MS}
               />
               <Line
                 type="monotone"
@@ -461,6 +463,7 @@ export function ManualSimDashboard() {
                 name="Private debt"
                 stroke="#ca8a04"
                 dot={false}
+                animationDuration={LINE_CHART_ANIMATION_MS}
               />
               <Line
                 type="monotone"
@@ -468,6 +471,7 @@ export function ManualSimDashboard() {
                 name="Public debt"
                 stroke="#dc2626"
                 dot={false}
+                animationDuration={LINE_CHART_ANIMATION_MS}
               />
               <Line
                 type="monotone"
@@ -475,6 +479,7 @@ export function ManualSimDashboard() {
                 name="Household equity"
                 stroke="#9333ea"
                 dot={false}
+                animationDuration={LINE_CHART_ANIMATION_MS}
               />
               <Line
                 type="monotone"
@@ -482,6 +487,7 @@ export function ManualSimDashboard() {
                 name="Firm equity"
                 stroke="#7c3aed"
                 dot={false}
+                animationDuration={LINE_CHART_ANIMATION_MS}
                 strokeDasharray="4 4"
               />
               <Line
@@ -490,6 +496,7 @@ export function ManualSimDashboard() {
                 name="Bank equity"
                 stroke="#0d9488"
                 dot={false}
+                animationDuration={LINE_CHART_ANIMATION_MS}
               />
               <Line
                 type="monotone"
@@ -497,6 +504,7 @@ export function ManualSimDashboard() {
                 name="Treasury equity"
                 stroke="#9f1239"
                 dot={false}
+                animationDuration={LINE_CHART_ANIMATION_MS}
               />
             </LineChart>
           </ResponsiveContainer>

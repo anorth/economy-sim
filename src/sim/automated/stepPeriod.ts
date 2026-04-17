@@ -34,6 +34,16 @@ export function planLabourPhase1Period(
   }
 
   const productivity = real.labourProductivity;
+  const output = Math.max(
+    0,
+    Math.min(
+      real.expectedSales,
+      Math.min(
+        real.labourForce,
+        Math.max(0, real.expectedSales / Math.max(productivity, 1e-12))
+      ) * productivity
+    )
+  );
   const N = Math.min(
     real.labourForce,
     Math.max(0, real.expectedSales / Math.max(productivity, 1e-12))
@@ -63,17 +73,19 @@ export function planLabourPhase1Period(
 
   const hhDep = balance(postings, "hh.deposits");
   const prop = Math.min(1, Math.max(0, policy.consumptionPropensityFromDeposits));
-  const C = Math.max(0, Math.min(hhDep, hhDep * prop));
-  if (C > 0) {
-    const c = { type: "householdConsumption" as const, amount: C };
+  const priceLevel = Math.max(real.priceLevel, 1e-12);
+  const desiredConsumptionMoney = Math.max(0, Math.min(hhDep, hhDep * prop));
+  const desiredConsumptionReal = desiredConsumptionMoney / priceLevel;
+  const actualConsumptionReal = Math.max(0, Math.min(output, desiredConsumptionReal));
+  const actualConsumptionMoney = actualConsumptionReal * priceLevel;
+  if (actualConsumptionMoney > 0) {
+    const c = { type: "householdConsumption" as const, amount: actualConsumptionMoney };
     actions.push(c);
     applyAction(postings, c);
   }
 
-  const output = N * productivity;
   const adapt = Math.min(1, Math.max(0, policy.salesExpectationAdaptation));
-  const nextExpected =
-    (1 - adapt) * real.expectedSales + adapt * C;
+  const nextExpected = (1 - adapt) * real.expectedSales + adapt * actualConsumptionReal;
 
   return {
     actions,
@@ -81,7 +93,7 @@ export function planLabourPhase1Period(
       ...real,
       employment: N,
       lastPeriodOutput: output,
-      lastPeriodConsumption: C,
+      lastPeriodConsumption: actualConsumptionReal,
       lastPeriodWageBill: W,
       expectedSales: nextExpected,
     },

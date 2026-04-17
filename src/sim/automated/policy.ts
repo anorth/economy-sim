@@ -18,7 +18,7 @@ export type LabourPhase1Policy = {
 export const DEFAULT_LABOUR_PHASE1_POLICY: LabourPhase1Policy = {
   fiatSpendToHouseholdsPerPeriod: 0,
   autoBorrowForPayroll: true,
-  householdIncomeTaxRate: 0.1,
+  householdIncomeTaxRate: 0,
   consumptionPropensityFromDeposits: 0.75,
   salesExpectationAdaptation: 0.3,
 };

@@ -1,0 +1,1 @@
+export const LINE_CHART_ANIMATION_MS = 200;
