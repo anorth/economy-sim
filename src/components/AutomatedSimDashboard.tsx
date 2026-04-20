@@ -18,6 +18,7 @@ import {
   AUTOMATED_SLOT_ID,
   buildLedgerEconomyView,
   createAutomatedSimulation,
+  currentMetrics,
   currentPostings,
   currentReal,
   DEFAULT_LABOUR_PHASE1_POLICY,
@@ -34,12 +35,12 @@ import {
   type RealEconomyState,
 } from "@/sim";
 
-function fmt(n: number) {
-  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+function fmt(n: number, dp: number = 2) {
+  return n.toLocaleString(undefined, { maximumFractionDigits: dp });
 }
 
-function fmtPct(n: number) {
-  return `${(n * 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
+function fmtPct(n: number, dp: number = 2) {
+  return `${(n * 100).toLocaleString(undefined, { maximumFractionDigits: dp })}%`;
 }
 
 function clampUnitInterval(n: number) {
@@ -61,6 +62,21 @@ function MetricRow({
     <div className="flex items-baseline justify-between gap-4">
       <dt className="min-w-0 flex-1 text-zinc-500">{label}</dt>
       <dd className="shrink-0 text-right font-mono">{value}</dd>
+    </div>
+  );
+}
+
+function MetricSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div>
+      <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-400">{title}</h3>
+      <MetricList>{children}</MetricList>
     </div>
   );
 }
@@ -88,6 +104,7 @@ export function AutomatedSimDashboard() {
     [state]
   );
 
+  const metrics = useMemo(() => currentMetrics(state), [state]);
   const real = useMemo(() => currentReal(state), [state]);
   const initialReal = state.realHistory[0]!;
   const hasHistory = state.financial.periods.length > 0;
@@ -96,13 +113,14 @@ export function AutomatedSimDashboard() {
   const chartData = useMemo(() => {
     return state.financial.history.map((postings, periodIndex) => {
       const r = state.realHistory[periodIndex]!;
+      const m = state.metricsHistory[periodIndex]!;
       return {
         period: periodIndex,
         ...ledgerEconomyAggregates(postings),
         employment: r.employment,
         expectedSales: r.expectedSales,
-        lastConsumption: r.lastPeriodConsumption,
-        wageBill: r.lastPeriodWageBill,
+        lastConsumption: m.lastPeriodConsumption,
+        wageBill: m.lastPeriodWageBill,
       };
     });
   }, [state]);
@@ -279,7 +297,7 @@ export function AutomatedSimDashboard() {
                 <input
                   type="number"
                   min={0}
-                  step="any"
+                  step="0.1"
                   disabled={hasHistory}
                   className="rounded-md border border-zinc-300 px-3 py-2 font-mono disabled:bg-zinc-100"
                   value={initialReal.labourProductivity}
@@ -347,12 +365,27 @@ export function AutomatedSimDashboard() {
               Auto-borrow for payroll shortfall
             </label>
             <label className="flex flex-col gap-1">
+              <span className="text-zinc-500">Firm loan interest rate / period</span>
+              <input
+                type="number"
+                min={0}
+                step="0.005"
+                className="rounded-md border border-zinc-300 px-3 py-2 font-mono"
+                value={state.policy.firmLoanInterestRate * 52}
+                onChange={(e) =>
+                  updatePolicy({
+                    firmLoanInterestRate: Math.max(0, Number(e.target.value / 52) || 0),
+                  })
+                }
+              />
+            </label>
+            <label className="flex flex-col gap-1">
               <span className="text-zinc-500">Household income tax rate (0–1)</span>
               <input
                 type="number"
                 min={0}
                 max={1}
-                step="any"
+                step="0.01"
                 className="rounded-md border border-zinc-300 px-3 py-2 font-mono"
                 value={state.policy.householdIncomeTaxRate}
                 onChange={(e) =>
@@ -363,25 +396,39 @@ export function AutomatedSimDashboard() {
               />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-zinc-500">Consumption propensity (of deposits, 0–1)</span>
+              <span className="text-zinc-500">Consumption from wealth (0–1)</span>
               <input
                 type="number"
                 min={0}
                 max={1}
-                step="any"
+                step="0.1"
                 className="rounded-md border border-zinc-300 px-3 py-2 font-mono"
-                value={state.policy.consumptionPropensityFromDeposits}
+                value={state.policy.consumptionPropensityFromWealth}
                 onChange={(e) =>
                   updatePolicy({
-                    consumptionPropensityFromDeposits: clampUnitInterval(
-                      Number(e.target.value) || 0
-                    ),
+                    consumptionPropensityFromWealth: clampUnitInterval(Number(e.target.value) || 0),
                   })
                 }
               />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-zinc-500">Sales expectation adaptation (0–1)</span>
+              <span className="text-zinc-500">Consumption from employment income (0–1)</span>
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step="0.1"
+                className="rounded-md border border-zinc-300 px-3 py-2 font-mono"
+                value={state.policy.consumptionPropensityFromIncome}
+                onChange={(e) =>
+                  updatePolicy({
+                    consumptionPropensityFromIncome: clampUnitInterval(Number(e.target.value) || 0),
+                  })
+                }
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-zinc-500">Lagged sales expectation adaptation (0–1)</span>
               <input
                 type="number"
                 min={0}
@@ -392,6 +439,52 @@ export function AutomatedSimDashboard() {
                 onChange={(e) =>
                   updatePolicy({
                     salesExpectationAdaptation: clampUnitInterval(Number(e.target.value) || 0),
+                  })
+                }
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-zinc-500">Baseline expected sales growth / period</span>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                className="rounded-md border border-zinc-300 px-3 py-2 font-mono"
+                value={state.policy.baselineExpectedSalesGrowth}
+                onChange={(e) =>
+                  updatePolicy({
+                    baselineExpectedSalesGrowth: Math.max(0, Number(e.target.value) || 0),
+                  })
+                }
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-zinc-500">Wage pressure threshold (0–1)</span>
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step="0.1"
+                className="rounded-md border border-zinc-300 px-3 py-2 font-mono"
+                value={state.policy.wagePressureThreshold}
+                onChange={(e) =>
+                  updatePolicy({
+                    wagePressureThreshold: clampUnitInterval(Number(e.target.value) || 0),
+                  })
+                }
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-zinc-500">Wage pressure sensitivity / period</span>
+              <input
+                type="number"
+                min={0}
+                step="any"
+                className="rounded-md border border-zinc-300 px-3 py-2 font-mono"
+                value={state.policy.wagePressureSensitivity}
+                onChange={(e) =>
+                  updatePolicy({
+                    wagePressureSensitivity: Math.max(0, Number(e.target.value) || 0),
                   })
                 }
               />
@@ -450,20 +543,36 @@ export function AutomatedSimDashboard() {
           <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
             Real economy (this period)
           </h2>
+          <h3 className="mt-4 text-xs font-medium uppercase tracking-wide text-zinc-400">
+            State
+          </h3>
           <MetricList>
             <MetricRow label="Labour force" value={fmt(real.labourForce)} />
-            <MetricRow label="Employment" value={fmt(real.employment)} />
-            <MetricRow label="Employment rate" value={fmtPct(employmentRate)} />
+            <MetricRow label="Employment" value={fmt(real.employment, 1)} />
             <MetricRow
               label="Labour productivity (output per labour unit)"
               value={fmt(real.labourProductivity)}
             />
             <MetricRow label="Money wage (cost per labour unit)" value={fmt(real.moneyWage)} />
             <MetricRow label="Price level" value={fmt(real.priceLevel)} />
-            <MetricRow label="Expected sales (units)" value={fmt(real.expectedSales)} />
-            <MetricRow label="Last output" value={fmt(real.lastPeriodOutput)} />
-            <MetricRow label="Last wage bill" value={fmt(real.lastPeriodWageBill)} />
-            <MetricRow label="Last consumption" value={fmt(real.lastPeriodConsumption)} />
+            <MetricRow label="Expected sales (units)" value={fmt(real.expectedSales, 2)} />
+          </MetricList>
+          <h3 className="mt-6 text-xs font-medium uppercase tracking-wide text-zinc-400">
+            Metrics
+          </h3>
+          <MetricList>
+            <MetricRow label="Employment rate" value={fmtPct(employmentRate, 1)} />
+            <MetricRow
+              label="Planned expected sales (units)"
+              value={fmt(metrics.lastPlannedExpectedSales)}
+            />
+            <MetricRow label="Last output" value={fmt(metrics.lastPeriodOutput, 2)} />
+            <MetricRow label="Last wage bill" value={fmt(metrics.lastPeriodWageBill, 0)} />
+            <MetricRow label="Last interest payment" value={fmt(metrics.lastInterestPayment, 0)} />
+            <MetricRow label="Last consumption" value={fmt(metrics.lastPeriodConsumption, 1)} />
+            <MetricRow label="Expected revenue" value={fmt(metrics.lastExpectedRevenue, 0)} />
+            <MetricRow label="Expected outlays" value={fmt(metrics.lastExpectedOutlays, 0)} />
+            <MetricRow label="Coverage ratio" value={fmt(metrics.lastCoverageRatio, 4)} />
           </MetricList>
         </div>
       </section>
@@ -472,12 +581,26 @@ export function AutomatedSimDashboard() {
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
           Financial aggregates (ledger)
         </h2>
-        <MetricList>
-          <MetricRow label="Money supply" value={fmt(latest.aggregates.moneySupply)} />
-          <MetricRow label="Private debt" value={fmt(latest.aggregates.privateDebt)} />
-          <MetricRow label="Household equity" value={fmt(latest.aggregates.hhEquity)} />
-          <MetricRow label="Firm equity" value={fmt(latest.aggregates.firmEquity)} />
-        </MetricList>
+        <div className="mt-4 grid gap-6 lg:grid-cols-3">
+          <MetricSection title="Private Sector">
+            <MetricRow label="Money supply" value={fmt(latest.aggregates.moneySupply)} />
+            <MetricRow label="Private debt" value={fmt(latest.aggregates.privateDebt)} />
+            <MetricRow label="Firm loans" value={fmt(latest.aggregates.firmLoans)} />
+            <MetricRow label="Household equity" value={fmt(latest.aggregates.hhEquity)} />
+            <MetricRow label="Firm equity" value={fmt(latest.aggregates.firmEquity)} />
+          </MetricSection>
+          <MetricSection title="Banks">
+            <MetricRow label="Bank loans" value={fmt(latest.aggregates.bankLoans)} />
+            <MetricRow label="Bank reserves" value={fmt(latest.aggregates.totalReserves)} />
+            <MetricRow label="Bank bonds" value={fmt(latest.aggregates.bankBonds)} />
+            <MetricRow label="Bank equity" value={fmt(latest.aggregates.bankEquity)} />
+          </MetricSection>
+          <MetricSection title="Government">
+            <MetricRow label="Public debt" value={fmt(latest.aggregates.publicDebt)} />
+            <MetricRow label="Treasury account" value={fmt(latest.aggregates.generalAccount)} />
+            <MetricRow label="Treasury equity" value={fmt(latest.aggregates.treasuryEquity)} />
+          </MetricSection>
+        </div>
       </section>
 
       <section className="rounded-xl border border-zinc-200 p-4">
@@ -501,7 +624,7 @@ export function AutomatedSimDashboard() {
                 animationDuration={LINE_CHART_ANIMATION_MS}
               />
               <Line
-                yAxisId="left"
+                yAxisId="right"
                 type="monotone"
                 dataKey="employment"
                 name="Employment"

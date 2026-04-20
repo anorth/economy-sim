@@ -187,6 +187,7 @@ describe("linesForAction", () => {
       { type: "banksSellBondsToHouseholds" as const, amount: 1 },
       { type: "banksSellBondsToFirms" as const, amount: 1 },
       { type: "payWages" as const, amount: 1 },
+      { type: "payLoanInterestFirms" as const, amount: 1 },
       { type: "householdConsumption" as const, amount: 1 },
     ];
     for (const a of samples) {
@@ -310,9 +311,14 @@ describe("automated labour phase 1", () => {
       {
         fiatSpendToHouseholdsPerPeriod: 0,
         autoBorrowForPayroll: true,
+        firmLoanInterestRate: 0,
         householdIncomeTaxRate: 0,
-        consumptionPropensityFromDeposits: 0.75,
+        consumptionPropensityFromWealth: 0,
+        consumptionPropensityFromIncome: 0.75,
         salesExpectationAdaptation: 0.3,
+        baselineExpectedSalesGrowth: 0,
+        wagePressureThreshold: 1,
+        wagePressureSensitivity: 0,
       },
       {
         labourForce: 100,
@@ -324,17 +330,135 @@ describe("automated labour phase 1", () => {
     );
     auto = applyAutomatedPeriod(auto).state;
     expect(auto.realHistory[1]!.employment).toBe(80);
-    expect(auto.realHistory[1]!.lastPeriodWageBill).toBe(8000);
-    expect(auto.realHistory[1]!.lastPeriodConsumption).toBe(60);
+    expect(auto.metricsHistory[1]!.lastPeriodWageBill).toBe(8000);
+    expect(auto.metricsHistory[1]!.lastPeriodConsumption).toBe(60);
     expect(balance(currentPostings(auto.financial), "hh.deposits")).toBe(2000);
+  });
+
+  it("combines wealth and income propensities in household demand", () => {
+    let auto = createAutomatedSimulation(
+      {
+        fiatSpendToHouseholdsPerPeriod: 1000,
+        autoBorrowForPayroll: true,
+        firmLoanInterestRate: 0,
+        householdIncomeTaxRate: 0,
+        consumptionPropensityFromWealth: 0.5,
+        consumptionPropensityFromIncome: 0.5,
+        salesExpectationAdaptation: 0.3,
+        baselineExpectedSalesGrowth: 0,
+        wagePressureThreshold: 1,
+        wagePressureSensitivity: 0,
+      },
+      {
+        labourForce: 100,
+        moneyWage: 100,
+        priceLevel: 100,
+        labourProductivity: 1,
+        expectedSales: 80,
+      }
+    );
+    auto = applyAutomatedPeriod(auto).state;
+    expect(auto.metricsHistory[1]!.lastPeriodConsumption).toBe(45);
+    expect(balance(currentPostings(auto.financial), "hh.deposits")).toBe(4500);
+  });
+
+  it("updates expected sales with a one-period lag", () => {
+    let auto = createAutomatedSimulation(
+      {
+        fiatSpendToHouseholdsPerPeriod: 0,
+        autoBorrowForPayroll: true,
+        firmLoanInterestRate: 0,
+        householdIncomeTaxRate: 0,
+        consumptionPropensityFromWealth: 0,
+        consumptionPropensityFromIncome: 0.75,
+        salesExpectationAdaptation: 0.3,
+        baselineExpectedSalesGrowth: 0,
+        wagePressureThreshold: 1,
+        wagePressureSensitivity: 0,
+      },
+      {
+        labourForce: 100,
+        moneyWage: 100,
+        priceLevel: 100,
+        labourProductivity: 1,
+        expectedSales: 80,
+      }
+    );
+    auto = applyAutomatedPeriod(auto).state;
+    expect(auto.metricsHistory[1]!.lastPeriodConsumption).toBe(60);
+    expect(auto.realHistory[1]!.expectedSales).toBe(80);
+    auto = applyAutomatedPeriod(auto).state;
+    expect(auto.realHistory[2]!.expectedSales).toBeCloseTo(74);
+  });
+
+  it("raises wages when employment starts above the pressure threshold", () => {
+    let auto = createAutomatedSimulation(
+      {
+        fiatSpendToHouseholdsPerPeriod: 0,
+        autoBorrowForPayroll: true,
+        firmLoanInterestRate: 0,
+        householdIncomeTaxRate: 0,
+        consumptionPropensityFromWealth: 0,
+        consumptionPropensityFromIncome: 0.75,
+        salesExpectationAdaptation: 0.3,
+        baselineExpectedSalesGrowth: 0,
+        wagePressureThreshold: 0.95,
+        wagePressureSensitivity: (0.1 / 52) / 0.05,
+      },
+      {
+        labourForce: 100,
+        employment: 100,
+        moneyWage: 100,
+        priceLevel: 100,
+        labourProductivity: 1,
+        expectedSales: 100,
+      }
+    );
+    auto = applyAutomatedPeriod(auto).state;
+    expect(auto.realHistory[1]!.moneyWage).toBeCloseTo(100 * (1 + 0.1 / 52));
+  });
+
+  it("pays interest on outstanding firm loans", () => {
+    let auto = createAutomatedSimulation(
+      {
+        fiatSpendToHouseholdsPerPeriod: 0,
+        autoBorrowForPayroll: true,
+        firmLoanInterestRate: 0.07 / 52,
+        householdIncomeTaxRate: 0,
+        consumptionPropensityFromWealth: 0,
+        consumptionPropensityFromIncome: 0.75,
+        salesExpectationAdaptation: 0.3,
+        baselineExpectedSalesGrowth: 0,
+        wagePressureThreshold: 1,
+        wagePressureSensitivity: 0,
+      },
+      {
+        labourForce: 100,
+        moneyWage: 100,
+        priceLevel: 100,
+        labourProductivity: 1,
+        expectedSales: 80,
+      }
+    );
+    auto = applyAutomatedPeriod(auto).state;
+    const bankEquityBefore = balance(currentPostings(auto.financial), "banks.equity");
+    auto = applyAutomatedPeriod(auto).state;
+    expect(balance(currentPostings(auto.financial), "banks.equity")).toBeGreaterThan(
+      bankEquityBefore
+    );
   });
 
   it("runs a period as one action batch and keeps realHistory aligned", () => {
     let auto = createAutomatedSimulation({
       fiatSpendToHouseholdsPerPeriod: 0,
       autoBorrowForPayroll: true,
+      firmLoanInterestRate: 0,
       householdIncomeTaxRate: 0,
-      consumptionPropensityFromDeposits: 0.5,
+      consumptionPropensityFromWealth: 0.1,
+      consumptionPropensityFromIncome: 0.5,
+      baselineExpectedSalesGrowth: 0,
+      wagePressureThreshold: 1,
+      wagePressureSensitivity: 0,
     });
     expect(auto.realHistory).toHaveLength(1);
     expect(auto.financial.history).toHaveLength(1);
@@ -363,7 +487,10 @@ describe("automated labour phase 1", () => {
     const back = hydrateAutomatedSimulationState(JSON.parse(json) as unknown);
     expect(back.financial.periods).toHaveLength(1);
     expect(back.realHistory).toHaveLength(2);
+    expect(back.metricsHistory).toHaveLength(2);
     expect(back.realHistory[0]!.priceLevel).toBe(auto.realHistory[0]!.priceLevel);
+    expect(back.policy.firmLoanInterestRate).toBe(auto.policy.firmLoanInterestRate);
+    expect(back.metricsHistory[1]!.lastCoverageRatio).toBe(auto.metricsHistory[1]!.lastCoverageRatio);
     expect(balance(currentPostings(back.financial), "hh.deposits")).toBe(
       balance(currentPostings(auto.financial), "hh.deposits")
     );

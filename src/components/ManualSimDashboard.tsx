@@ -48,6 +48,7 @@ const ACTION_ORDER: SimAction["type"][] = [
   "banksSellBondsToHouseholds",
   "banksSellBondsToFirms",
   "payWages",
+  "payLoanInterestFirms",
   "householdConsumption",
 ];
 
@@ -64,6 +65,7 @@ const LABELS: Record<SimAction["type"], string> = {
   banksSellBondsToHouseholds: "Banks sell bonds to households",
   banksSellBondsToFirms: "Banks sell bonds to firms",
   payWages: "Pay wages (firms → households)",
+  payLoanInterestFirms: "Pay loan interest (firms → banks)",
   householdConsumption: "Household consumption (goods from firms)",
 };
 

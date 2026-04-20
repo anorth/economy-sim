@@ -23,6 +23,8 @@ export type SimAction =
   | { type: "tax"; amount: number; from: FiatTarget }
   /** Firms pay wages: deposits move firms → households, with matching equity (cost / labour income). */
   | { type: "payWages"; amount: number }
+  /** Firms pay interest on bank debt from deposits to bank equity. */
+  | { type: "payLoanInterestFirms"; amount: number }
   /** Households buy goods from firms: deposits firms → households, equity opposite to wages. */
   | { type: "householdConsumption"; amount: number }
   | { type: "treasurySellBondsToBanks"; amount: number }
@@ -113,6 +115,15 @@ export function linesForAction(action: SimAction): JournalLine[] {
         line("hh.equity", 0, action.amount),
       ];
     }
+    case "payLoanInterestFirms": {
+      assertPositive("amount", action.amount);
+      return [
+        line("banks.deposits_due", action.amount, 0),
+        line("firms.deposits", 0, action.amount),
+        line("firms.equity", action.amount, 0),
+        line("banks.equity", 0, action.amount),
+      ];
+    }
     case "householdConsumption": {
       assertPositive("amount", action.amount);
       return [
@@ -195,6 +206,8 @@ export function describeAction(action: SimAction): string {
       return `Tax ← ${action.from} (${action.amount})`;
     case "payWages":
       return `Pay wages (firms → households) (${action.amount})`;
+    case "payLoanInterestFirms":
+      return `Pay loan interest (firms → banks) (${action.amount})`;
     case "householdConsumption":
       return `Household consumption (goods from firms) (${action.amount})`;
     case "treasurySellBondsToBanks":

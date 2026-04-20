@@ -1,6 +1,6 @@
 import { applyAndAdvance, undoLastPeriod } from "../simulation";
 import type { AutomatedSimulationState } from "./state";
-import { currentReal } from "./state";
+import { currentMetrics, currentReal } from "./state";
 import { planLabourPhase1Period } from "./stepPeriod";
 
 export type AutomatedStepResult = {
@@ -12,9 +12,11 @@ export type AutomatedStepResult = {
  */
 export function applyAutomatedPeriod(state: AutomatedSimulationState): AutomatedStepResult {
   const real = currentReal(state);
-  const { actions, nextReal } = planLabourPhase1Period(
+  const prevMetrics = currentMetrics(state);
+  const { actions, nextReal, metrics } = planLabourPhase1Period(
     state.financial,
     real,
+    prevMetrics,
     state.policy
   );
   const { state: nextFinancial } = applyAndAdvance(state.financial, actions);
@@ -22,6 +24,7 @@ export function applyAutomatedPeriod(state: AutomatedSimulationState): Automated
     state: {
       financial: nextFinancial,
       realHistory: [...state.realHistory, nextReal],
+      metricsHistory: [...state.metricsHistory, metrics],
       policy: state.policy,
     },
   };
@@ -39,6 +42,7 @@ export function undoAutomatedLastPeriod(
   return {
     financial: undoLastPeriod(state.financial),
     realHistory: state.realHistory.slice(0, -1),
+    metricsHistory: state.metricsHistory.slice(0, -1),
     policy: state.policy,
   };
 }

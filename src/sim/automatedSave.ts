@@ -6,8 +6,8 @@ import type { AutomatedSimulationState } from "./automated/state";
 import { hydrateFinancialSimulationState } from "./saveGame";
 import type { LabourPhase1Policy } from "./automated/policy";
 import { DEFAULT_LABOUR_PHASE1_POLICY } from "./automated/policy";
-import type { RealEconomyState } from "./automated/real";
-import { DEFAULT_REAL_ECONOMY_STATE } from "./automated/real";
+import type { RealEconomyMetrics, RealEconomyState } from "./automated/real";
+import { DEFAULT_REAL_ECONOMY_METRICS, DEFAULT_REAL_ECONOMY_STATE } from "./automated/real";
 
 export const AUTOMATED_SAVE_FORMAT_VERSION = 1 as const;
 
@@ -38,12 +38,41 @@ function normalizeRealEconomyState(raw: unknown): RealEconomyState {
     priceLevel: num("priceLevel", DEFAULT_REAL_ECONOMY_STATE.priceLevel),
     labourProductivity: num("labourProductivity", DEFAULT_REAL_ECONOMY_STATE.labourProductivity),
     expectedSales: num("expectedSales", DEFAULT_REAL_ECONOMY_STATE.expectedSales),
-    lastPeriodOutput: num("lastPeriodOutput", DEFAULT_REAL_ECONOMY_STATE.lastPeriodOutput),
+  };
+}
+
+function normalizeRealEconomyMetrics(raw: unknown): RealEconomyMetrics {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_REAL_ECONOMY_METRICS };
+  const o = raw as Record<string, unknown>;
+  const num = (k: string, d: number) =>
+    typeof o[k] === "number" && Number.isFinite(o[k] as number) ? (o[k] as number) : d;
+  return {
+    lastPeriodOutput: num("lastPeriodOutput", DEFAULT_REAL_ECONOMY_METRICS.lastPeriodOutput),
     lastPeriodConsumption: num(
       "lastPeriodConsumption",
-      DEFAULT_REAL_ECONOMY_STATE.lastPeriodConsumption
+      DEFAULT_REAL_ECONOMY_METRICS.lastPeriodConsumption
     ),
-    lastPeriodWageBill: num("lastPeriodWageBill", DEFAULT_REAL_ECONOMY_STATE.lastPeriodWageBill),
+    lastPeriodWageBill: num("lastPeriodWageBill", DEFAULT_REAL_ECONOMY_METRICS.lastPeriodWageBill),
+    lastInterestPayment: num(
+      "lastInterestPayment",
+      DEFAULT_REAL_ECONOMY_METRICS.lastInterestPayment
+    ),
+    lastExpectedRevenue: num(
+      "lastExpectedRevenue",
+      DEFAULT_REAL_ECONOMY_METRICS.lastExpectedRevenue
+    ),
+    lastExpectedOutlays: num(
+      "lastExpectedOutlays",
+      DEFAULT_REAL_ECONOMY_METRICS.lastExpectedOutlays
+    ),
+    lastCoverageRatio: num(
+      "lastCoverageRatio",
+      DEFAULT_REAL_ECONOMY_METRICS.lastCoverageRatio
+    ),
+    lastPlannedExpectedSales: num(
+      "lastPlannedExpectedSales",
+      DEFAULT_REAL_ECONOMY_METRICS.lastPlannedExpectedSales
+    ),
   };
 }
 
@@ -61,17 +90,37 @@ function normalizePolicy(raw: unknown): LabourPhase1Policy {
       typeof o.autoBorrowForPayroll === "boolean"
         ? o.autoBorrowForPayroll
         : DEFAULT_LABOUR_PHASE1_POLICY.autoBorrowForPayroll,
+    firmLoanInterestRate: num(
+      "firmLoanInterestRate",
+      DEFAULT_LABOUR_PHASE1_POLICY.firmLoanInterestRate
+    ),
     householdIncomeTaxRate: num(
       "householdIncomeTaxRate",
       DEFAULT_LABOUR_PHASE1_POLICY.householdIncomeTaxRate
     ),
-    consumptionPropensityFromDeposits: num(
-      "consumptionPropensityFromDeposits",
-      DEFAULT_LABOUR_PHASE1_POLICY.consumptionPropensityFromDeposits
+    consumptionPropensityFromWealth: num(
+      "consumptionPropensityFromWealth",
+      DEFAULT_LABOUR_PHASE1_POLICY.consumptionPropensityFromWealth
+    ),
+    consumptionPropensityFromIncome: num(
+      "consumptionPropensityFromIncome",
+      DEFAULT_LABOUR_PHASE1_POLICY.consumptionPropensityFromIncome
+    ),
+    baselineExpectedSalesGrowth: num(
+      "baselineExpectedSalesGrowth",
+      DEFAULT_LABOUR_PHASE1_POLICY.baselineExpectedSalesGrowth
     ),
     salesExpectationAdaptation: num(
       "salesExpectationAdaptation",
       DEFAULT_LABOUR_PHASE1_POLICY.salesExpectationAdaptation
+    ),
+    wagePressureThreshold: num(
+      "wagePressureThreshold",
+      DEFAULT_LABOUR_PHASE1_POLICY.wagePressureThreshold
+    ),
+    wagePressureSensitivity: num(
+      "wagePressureSensitivity",
+      DEFAULT_LABOUR_PHASE1_POLICY.wagePressureSensitivity
     ),
   };
 }
@@ -95,15 +144,30 @@ export function hydrateAutomatedSimulationState(raw: unknown): AutomatedSimulati
     realHistory = [{ ...DEFAULT_REAL_ECONOMY_STATE }];
   }
 
-  if (realHistory.length !== financial.history.length) {
+  let metricsHistory: RealEconomyMetrics[];
+  if (Array.isArray(o.metricsHistory)) {
+    metricsHistory = o.metricsHistory.map(normalizeRealEconomyMetrics);
+  } else if (Array.isArray(o.realHistory)) {
+    metricsHistory = o.realHistory.map(normalizeRealEconomyMetrics);
+  } else if (o.real && typeof o.real === "object") {
+    metricsHistory = [normalizeRealEconomyMetrics(o.real)];
+  } else {
+    metricsHistory = [{ ...DEFAULT_REAL_ECONOMY_METRICS }];
+  }
+
+  if (
+    realHistory.length !== financial.history.length ||
+    metricsHistory.length !== financial.history.length
+  ) {
     throw new Error(
-      `Automated state: realHistory length ${realHistory.length} must match financial.history length ${financial.history.length}`
+      `Automated state histories must match financial.history length ${financial.history.length}`
     );
   }
 
   return {
     financial,
     realHistory,
+    metricsHistory,
     policy: normalizePolicy(o.policy),
   };
 }
